@@ -5,8 +5,6 @@ body {
 }
 
 .content {
-    margin: auto;
-    width: 140vh;
     margin-top: -100px;
 }
 
@@ -61,17 +59,14 @@ body {
 }
 
 .main {
-    margin-top: 10px;    
     min-height: 800px;
     display: flex;
     flex-direction: row;
-    column-gap: 10px;
 }
 
 .main .menu {
     background-color: #353843;
     border-radius: 7px;
-    width: 300px;
     padding: 10px;
     border-width: 1px;
     border-style: solid;
@@ -81,7 +76,6 @@ body {
 .main .site {
     background-color: #353843;
     border-radius: 7px;
-    width: 100%;
     padding: 10px;
     border-width: 1px;
     border-style: solid;
@@ -89,23 +83,22 @@ body {
 }
 
 .parallax {
-    min-height: 250px;
     background-color: #744DA9;
     display: flex;
     flex-direction: column;
     border-bottom: 1px solid rgb(174, 176, 184);
     z-index: -1;
     transform-style: preserve-3d;
-    transform: translate3d(0,-250px,-100px) scale(2);
-    width: 100%;
-    height: 40%;
+    height: 40vh;
+    min-height: 40vh;
+    transform: translate3d(0, -40vh, -100px) scale(2.5); /* 100%/40vh = 2.5 */
     position: relative;
 }
 
 .parallax-title {
     font-size: 5vw;
     margin-left : 20vh;
-    margin-top: 50px;
+    margin-top: 100px;
     color: whitesmoke;
     user-select: none;
 }
