@@ -103,12 +103,11 @@ body {
 }
 
 .parallax-title {
-    font-size: 80pt;
-    margin-left : 100px;
+    font-size: 5vw;
+    margin-left : 20vh;
     margin-top: 50px;
     color: whitesmoke;
     user-select: none;
-    z-index: -1;
 }
 
 .wrapper {
