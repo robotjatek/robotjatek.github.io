@@ -9,9 +9,11 @@ const router = {
     routes: {},
 
     navigate: function (path, navId) {
-        const oldNav = document.getElementById(this.activeRoute.path + 'Nav');
-        if (oldNav) {
-            oldNav.classList.remove('active');
+        if (this.activeRoute) {
+            const oldNav = document.getElementById(this.activeRoute.path + 'Nav');
+            if (oldNav) {
+                oldNav.classList.remove('active');
+            }
         }
 
         this.activeRoute = this.routes[path];
@@ -28,14 +30,17 @@ const registerRoutes = () => {
     router.routes['projects'] = { template: 'projectsTemplate', path: 'projects' };
     router.routes['cv'] = { template: 'cvTemplate', path: 'cv' };
     router.routes['contact'] = { template: 'contactTemplate', path: 'contact' };
-    
+
     if (!router.activeRoute.path) {
         const hash = window.location.href.split('#')[1];
         if (hash) {
             router.navigate(hash, hash + 'Nav');
         } else {
-            router.navigate('about', 'about' + 'Nav');   
+            router.navigate('about', 'about' + 'Nav');
         }
+    } else {
+        const nav = document.getElementById(router.activeRoute.path + 'Nav');
+        nav.classList.remove('active');
     }
 }
 
