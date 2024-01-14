@@ -28,8 +28,15 @@ const registerRoutes = () => {
     router.routes['projects'] = { template: 'projectsTemplate', path: 'projects' };
     router.routes['cv'] = { template: 'cvTemplate', path: 'cv' };
     router.routes['contact'] = { template: 'contactTemplate', path: 'contact' };
-
-    router.navigate('about', 'aboutNav');
+    
+    if (!router.activeRoute.path) {
+        const hash = window.location.href.split('#')[1];
+        if (hash) {
+            router.navigate(hash, hash + 'Nav');
+        } else {
+            router.navigate('about', 'about' + 'Nav');   
+        }
+    }
 }
 
 window.addEventListener('load', registerRoutes);
