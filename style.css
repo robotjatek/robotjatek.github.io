@@ -29,6 +29,7 @@ body {
 {
     border-radius: 7px;
     width: 150px;
+    height: 100%;
     margin-left: 20px;
     margin-right: 20px;
     background-color: #171729;
@@ -45,6 +46,21 @@ body {
 
 .header-content .left .name {
     color: whitesmoke;
+}
+
+.header-content .left .social {
+    display: flex;
+    flex-direction: row;
+    column-gap: 25px;
+    margin: 0;
+}
+
+.header-content .left .social a {
+    color: rgb(174, 176, 184);
+}
+
+.header-content .left .line {
+    margin: 0.5rem 0;
 }
 
 .header-content .left .about-second {
