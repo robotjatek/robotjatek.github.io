@@ -12,8 +12,7 @@ const router = {
         // Show default page when the selected route does not exist
         const selectedRoute = this.routes[path];
         if (!selectedRoute) {
-            // TODO: not found page instead?
-            await this.navigate('about', 'aboutNav');
+            await this.navigate('404', '');
             return;
         }
 
@@ -45,7 +44,7 @@ const getPage = async (url) => {
     try {
         const response = await fetch(url);
         if (!response.ok) {
-            return 'Not found'; // TODO: proper 404 page
+            return 'Template not found';
         }
 
         const page = await response.text();
@@ -57,6 +56,7 @@ const getPage = async (url) => {
 
 const onPageLoad = async () => {
     // Register routes
+    router.routes['404'] = { template: 'notfound.html', path: '404'};
     router.routes['about'] = { template: 'about.html', path: 'about' };
     router.routes['projects'] = { template: 'projects.html', path: 'projects' };
     router.routes['cv'] = { template: 'cv.html', path: 'cv' };
