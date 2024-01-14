@@ -9,7 +9,13 @@ const router = {
     routes: {},
 
     navigate: async function (path, navId) {
-        // Show default page when the selected route does not exist
+        // Show default page when no navigation info is present (eg.: first navigation)
+        if (!path) {
+            await this.navigate('about', 'aboutNav');
+            return;
+        }
+
+        // Show 404 page when the selected route does not exist
         const selectedRoute = this.routes[path];
         if (!selectedRoute) {
             await this.navigate('404', '');
