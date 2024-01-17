@@ -1,7 +1,7 @@
 body {
     background-color: #171729;
     color: rgb(184, 184, 184);
-    font-family: 'Consolas', monospace;
+    font-family: 'Consolas', 'Monaco', monospace;
 }
 
 .content {
