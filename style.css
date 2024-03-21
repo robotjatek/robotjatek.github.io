@@ -8,6 +8,10 @@ body {
     margin-top: -100px;
 }
 
+.content a {
+    color: rgb(174, 176, 184);
+}
+
 .header {
     background-color: #353843;
     border-radius: 7px;

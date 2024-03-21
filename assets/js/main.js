@@ -8,17 +8,17 @@ const router = {
 
     routes: {},
 
-    navigate: async function (path, navId) {
+    navigate: async function (path, subPage, navId) {
         // Show default page when no navigation info is present (eg.: first navigation)
         if (!path) {
-            await this.navigate('about', 'aboutNav');
+            await this.navigate('about', null, 'aboutNav');
             return;
         }
 
         // Show 404 page when the selected route does not exist
         const selectedRoute = this.routes[path];
         if (!selectedRoute) {
-            await this.navigate('404', '');
+            await this.navigate('404', null, '');
             return;
         }
 
@@ -38,8 +38,8 @@ const router = {
                 nav.classList.add('active');
             }
 
-            const pageUrl = `/pages/${selectedRoute.template}`;
-            const page = await getPage(pageUrl);
+            const url = !subPage ? `/pages/${selectedRoute.template}` : `/pages/${path}/${subPage}.html`
+            const page = await getPage(url);
             const contentDiv = document.getElementById('contentContainer');
             contentDiv.innerHTML = page;
         }
@@ -71,13 +71,17 @@ const onPageLoad = async () => {
     // Preserve active page between page reloads
     if (!router.activeRoute.path) {
         // Try to navigate to the page defined by the URL
-        const hash = window.location.href.split('#')[1];
-        await router.navigate(hash, hash + 'Nav');
+        const split = window.location.href.split('#');
+        const page = split[1];
+        const subPage = split[2];
+        await router.navigate(page, subPage, page + 'Nav');
     }
 }
 
 window.addEventListener('load', onPageLoad);
 window.addEventListener('hashchange', async (event) => {
-    const hash = event.newURL.split('#')[1];
-    await router.navigate(hash, hash + 'Nav');
+    const split = event.newURL.split('#');
+    const page = split[1];
+    const subPage = split[2];
+    await router.navigate(page, subPage, page + 'Nav');
 });
