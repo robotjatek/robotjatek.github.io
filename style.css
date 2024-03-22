@@ -29,13 +29,18 @@ body {
     align-content: center;
 }
 
-.header .header-content .profile-pic
+.header .header-content .profile-pic-container {
+    width: 150px;
+    height: 100%;
+    margin-right: 20px;
+    padding: 10px;
+}
+
+.header .header-content .profile-pic-container .profile-pic
 {
     border-radius: 7px;
     width: 150px;
     height: 100%;
-    margin-left: 20px;
-    margin-right: 20px;
     background-color: #171729;
     padding: 10px;
     border-width: 1px;
