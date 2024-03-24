@@ -1,3 +1,13 @@
+:root {
+    --purple: #744DA9;
+    --blue: #0078D7;
+    --teal: #0099BC;
+    --red: #E81123;
+    --orange: #DA3B01;
+
+    --accent-color: var(--purple);
+}
+
 body {
     background-color: #171729;
     color: rgb(184, 184, 184);
@@ -107,7 +117,7 @@ body {
 }
 
 .parallax {
-    background-color: #744DA9;
+    background-color: var(--accent-color);
     display: flex;
     flex-direction: column;
     border-bottom: 1px solid rgb(174, 176, 184);
@@ -151,12 +161,12 @@ body {
 }
 
 .main .nav-list .active {
-    background-color: #744DA9;
+    background-color: var(--accent-color);
 }
 
 @media (hover: hover) { 
     .main .nav-list .nav-element:hover { 
-        background-color: #744DA9;
+        background-color: var(--accent-color)
     } 
 } 
 

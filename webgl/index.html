@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>WebGL engine</title>
+        <link rel="stylesheet" href="style.css">
+        <script data-main="bin/main" type="text/javascript" src="node_modules/requirejs/require.js"></script>
+        <script>
+           require.config({
+                paths: {
+                    'gl-matrix': '../node_modules/gl-matrix/dist/gl-matrix',
+                    'domready': '../node_modules/domready/ready'
+                }
+            });
+        </script>
+    </head>
+    <body>
+        <canvas id="canvas" tabindex="1"></canvas>
+        <div>Move hero with A/S keys!</div>
+    </body>
+</html>
