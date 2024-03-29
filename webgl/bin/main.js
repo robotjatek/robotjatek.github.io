@@ -25,6 +25,7 @@ define(["require", "exports", "domready", "./Game", "./KeyHandler", "./Keys"], f
                 game.Play();
             }
         });
+        canvas.focus();
         game.Run();
     });
 });
