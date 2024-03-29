@@ -7,7 +7,8 @@ define(["require", "exports", "gl-matrix", "./Sprite"], function (require, expor
             this.frameNumber = 0;
             this.currentFrameTime = 0;
         }
-        Animate(elapsedTime) {
+        Update(elapsedTime) {
+            super.Update(elapsedTime);
             this.currentFrameTime += elapsedTime;
             if (this.currentFrameTime > 66) {
                 if (this.frameNumber === 9) {
@@ -15,7 +16,7 @@ define(["require", "exports", "gl-matrix", "./Sprite"], function (require, expor
                     this.frameNumber = 0;
                 }
                 this.frameNumber++;
-                gl_matrix_1.vec2.add(this.textureOffset, this.textureOffset, gl_matrix_1.vec2.fromValues(1.0 / 10, 0));
+                gl_matrix_1.vec2.add(this.textureOffset, this.textureOffset, gl_matrix_1.vec2.fromValues(1.0 / 10, 0)); // TODO: this is hardcoded for coin.png
                 this.currentFrameTime = 0;
             }
         }

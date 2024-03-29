@@ -7,6 +7,8 @@ define(["require", "exports", "gl-matrix"], function (require, exports, gl_matri
             this.TextureCoordinates = textureCoordinates;
             this.textureOffset = gl_matrix_1.vec2.create();
         }
+        Update(elapsedTime) {
+        }
     }
     exports.Sprite = Sprite;
 });

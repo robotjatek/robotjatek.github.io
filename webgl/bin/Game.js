@@ -1,4 +1,4 @@
-define(["require", "exports", "gl-matrix", "./AnimatedSprite", "./Camera", "./Environment", "./Level", "./Shader", "./SpriteBatch", "./TexturePool", "./Utils", "./WebGLUtils", "./Hero", "./Keys"], function (require, exports, gl_matrix_1, AnimatedSprite_1, Camera_1, Environment_1, Level_1, Shader_1, SpriteBatch_1, TexturePool_1, Utils_1, WebGLUtils_1, Hero_1, Keys_1) {
+define(["require", "exports", "gl-matrix", "./Camera", "./Environment", "./Level", "./WebGLUtils", "./Hero", "./Keys", "./CoinObject"], function (require, exports, gl_matrix_1, Camera_1, Environment_1, Level_1, WebGLUtils_1, Hero_1, Keys_1, CoinObject_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     // TODO: update ts version
@@ -7,6 +7,7 @@ define(["require", "exports", "gl-matrix", "./AnimatedSprite", "./Camera", "./En
         constructor(keyhandler) {
             this.projectionMatrix = gl_matrix_1.mat4.create();
             this.camera = new Camera_1.Camera();
+            this.coins = [];
             this.paused = false;
             this.Width = window.innerWidth;
             this.Height = window.innerHeight;
@@ -21,9 +22,11 @@ define(["require", "exports", "gl-matrix", "./AnimatedSprite", "./Camera", "./En
             WebGLUtils_1.gl.clearColor(0, 1, 0, 1);
             this.level = new Level_1.Level('');
             this.start = new Date();
-            const texture = TexturePool_1.TexturePool.GetInstance().GetTexture('coin.png');
-            this.animSprite = new AnimatedSprite_1.AnimatedSprite(Utils_1.Utils.CreateSpriteVertices(10, 10), Utils_1.Utils.CreateTextureCoordinates(0, 0, 1.0 / 10, 1.0));
-            this.animatedCoinBatch = new SpriteBatch_1.SpriteBatch(new Shader_1.Shader('shaders/VertexShader.vert', 'shaders/FragmentShader.frag'), [this.animSprite], texture);
+            this.coins.push(new CoinObject_1.CoinObject(gl_matrix_1.vec3.fromValues(10, 10, 0)));
+            this.coins.push(new CoinObject_1.CoinObject(gl_matrix_1.vec3.fromValues(12, 10, 0)));
+            this.coins.push(new CoinObject_1.CoinObject(gl_matrix_1.vec3.fromValues(14, Environment_1.Environment.VerticalTiles - 3, 0)));
+            this.coins.push(new CoinObject_1.CoinObject(gl_matrix_1.vec3.fromValues(15, Environment_1.Environment.VerticalTiles - 3, 0)));
+            this.coins.push(new CoinObject_1.CoinObject(gl_matrix_1.vec3.fromValues(16, Environment_1.Environment.VerticalTiles - 3, 0)));
             // TODO: texture map padding
             this.hero = new Hero_1.Hero(gl_matrix_1.vec3.fromValues(0, Environment_1.Environment.VerticalTiles - 6, 1), gl_matrix_1.vec2.fromValues(3, 3), this.level.MainLayer);
         }
@@ -45,14 +48,17 @@ define(["require", "exports", "gl-matrix", "./AnimatedSprite", "./Camera", "./En
         Render(elapsedTime) {
             WebGLUtils_1.gl.clear(WebGLUtils_1.gl.COLOR_BUFFER_BIT | WebGLUtils_1.gl.DEPTH_BUFFER_BIT);
             this.level.Draw(this.projectionMatrix, this.camera.GetViewMatrix());
-            this.animatedCoinBatch.Draw(this.projectionMatrix, this.camera.GetViewMatrix());
+            this.coins.forEach(coin => {
+                coin.Draw(this.projectionMatrix, this.camera.GetViewMatrix());
+                coin.Update(elapsedTime);
+            });
             this.hero.Draw(this.projectionMatrix, this.camera.GetViewMatrix());
-            this.animSprite.Animate(elapsedTime);
             requestAnimationFrame(this.Run.bind(this));
         }
         Update(elapsedTime) {
             this.hero.Update(elapsedTime);
-            // TODO: collide with other objects
+            // Remove colliding coin from the list
+            this.coins = this.coins.filter((coin) => !coin.IsCollidingWidth(this.hero.BoundingBox));
             if (this.KeyHandler.IsPressed(Keys_1.Keys.A)) {
                 this.hero.MoveLeft(elapsedTime);
             }
