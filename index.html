@@ -1,20 +1,71 @@
-<!doctype html>
-<html>
-    <head>
-        <meta charset="utf-8" />
-        <title>WebGL engine</title>
-        <link rel="stylesheet" href="style.css">
-        <script data-main="bin/main" type="text/javascript" src="node_modules/requirejs/require.js"></script>
-        <script>
-           require.config({
-                paths: {
-                    'gl-matrix': '../node_modules/gl-matrix/dist/gl-matrix',
-                    'domready': '../node_modules/domready/ready'
-                }
-            });
-        </script>
-    </head>
-    <body>
-        <canvas id="canvas" tabindex="1"></canvas>
-    </body>
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>Robotjatek | DEV</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN"
+      crossorigin="anonymous"
+    />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link href="style.css" rel="stylesheet" />    
+  </head>
+
+  <body>
+      <div class="wrapper">
+        <div class="parallax">
+          <div class="parallax-title">robotjatek.github.io</div>
+        </div>
+        <div class="content container">     
+          <header class="header row mb-2">
+            <div class="row justify-content-center header-content">
+              <div class="profile-pic-container col-lg-1 col-xs-12">
+                <a href="#"><img src="assets/img/robot.png" class="profile-pic" title="Beep, beep, I'm a sheep 🐑"/></a>
+              </div>
+              <div class="left col-lg col-xs">
+                <div>
+                  <h1 class="name">Szücs Attila | robotjatek</h1>
+                  <div class="title">Software Engineer / DEV / Code monkey</div>
+                </div>
+                <div class="social">
+                  <a href="https://github.com/robotjatek" title="GitHub" target="_blank" rel="noopener noreferrer"><i class="bi bi-github"></i></a>
+                  <a href="https://twitter.com/robotjatek" title="Twitter" target="_blank" rel="noopener noreferrer"><i class="bi bi-twitter"></i></a>
+                  <a href="https://www.youtube.com/@robotjatek" title="Youtube" target="_blank" rel="noopener noreferrer"><i class="bi bi-youtube"></i></a>
+                  <a href="https://www.linkedin.com/in/attila-sz%C3%BCcs-13050388/" title="LinkedIn" target="_blank" rel="noopener noreferrer"><i class="bi bi-linkedin"></i></a>
+                  <a href="https://www.goodreads.com/user/show/59438491-attila-sz-cs/" title="GoodReads" target="_blank" rel="noopener noreferrer"><i class="bi bi-book-fill"></i></a>
+                  <a href="mailto:attila.szucs.job@outlook.com" title="mail"><i class="bi bi-envelope-at-fill"></i></a>
+                </div>
+                <hr class="line"/>
+                <div class="about-first">I love coding...</div>
+                <div class="about-second">...but I think I suck at color theory</div>
+              </div>
+            </div>
+          </header>
+
+          <div class="main row justify-content-center gap-2">
+            <div class="menu col-lg-2">
+              <ul class="nav-list">
+                <li id="aboutNav" class="nav-element"><a href="#about">About</a></li>
+                <li id="cvNav" class="nav-element"><a href="#cv">CV</a></li>
+                <li id="projectsNav" class="nav-element"><a href="#projects">Projects</a></li>
+                <li id="contactNav" class="nav-element"><a href="#contact">Contact</a></li>
+              </ul>
+            </div>
+
+            <div id="contentContainer" class="site col-lg"></div>
+
+          </div>
+        </div>
+      </div>
+
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL"
+      crossorigin="anonymous"
+    ></script>
+    <script src="./assets/js/main.js"></script>
+  </body>
 </html>
