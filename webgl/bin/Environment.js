@@ -5,5 +5,6 @@ define(["require", "exports"], function (require, exports) {
     }
     Environment.VerticalTiles = 18;
     Environment.HorizontalTiles = 32;
+    Environment.RenderBoundingBoxes = true;
     exports.Environment = Environment;
 });

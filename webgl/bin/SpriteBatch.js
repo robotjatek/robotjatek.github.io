@@ -24,8 +24,8 @@ define(["require", "exports", "gl-matrix", "./WebGLUtils"], function (require, e
         Draw(projectionMatrix, viewMatrix) {
             const shaderProgram = this.BatchShader.GetProgram();
             this.BatchShader.Use();
-            const attribLocation = WebGLUtils_1.gl.getAttribLocation(this.BatchShader.GetProgram(), "a_pos");
-            const textureCoordinateAttribLocation = WebGLUtils_1.gl.getAttribLocation(this.BatchShader.GetProgram(), "a_texture_coordinate");
+            const attribLocation = WebGLUtils_1.gl.getAttribLocation(shaderProgram, "a_pos");
+            const textureCoordinateAttribLocation = WebGLUtils_1.gl.getAttribLocation(shaderProgram, "a_texture_coordinate");
             WebGLUtils_1.gl.activeTexture(WebGLUtils_1.gl.TEXTURE0);
             WebGLUtils_1.gl.bindTexture(WebGLUtils_1.gl.TEXTURE_2D, this.Texture.GetTexture());
             WebGLUtils_1.gl.bindBuffer(WebGLUtils_1.gl.ARRAY_BUFFER, this.VertexBuffer);
@@ -42,7 +42,7 @@ define(["require", "exports", "gl-matrix", "./WebGLUtils"], function (require, e
             WebGLUtils_1.gl.uniformMatrix4fv(modelLocation, false, this.ModelMatrix);
             const textureLocation = WebGLUtils_1.gl.getUniformLocation(shaderProgram, "u_sampler");
             WebGLUtils_1.gl.uniform1i(textureLocation, 0);
-            const textureOffsetLocation = WebGLUtils_1.gl.getUniformLocation(shaderProgram, "textureOffset");
+            const textureOffsetLocation = WebGLUtils_1.gl.getUniformLocation(shaderProgram, "texOffset");
             WebGLUtils_1.gl.uniform2fv(textureOffsetLocation, this.spr.textureOffset);
             WebGLUtils_1.gl.enable(WebGLUtils_1.gl.BLEND);
             WebGLUtils_1.gl.blendFunc(WebGLUtils_1.gl.SRC_ALPHA, WebGLUtils_1.gl.ONE_MINUS_SRC_ALPHA);

@@ -7,7 +7,7 @@ define(["require", "exports", "gl-matrix", "./Sprite"], function (require, expor
             this.frameNumber = 0;
             this.currentFrameTime = 0;
         }
-        Update(elapsedTime) {
+        Animate(elapsedTime) {
             this.currentFrameTime += elapsedTime;
             if (this.currentFrameTime > 66) {
                 if (this.frameNumber === 9) {

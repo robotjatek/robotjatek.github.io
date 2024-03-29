@@ -1,4 +1,4 @@
-define(["require", "exports", "domready", "./Game", "./KeyHandler"], function (require, exports, domready, Game_1, KeyHandler_1) {
+define(["require", "exports", "domready", "./Game", "./KeyHandler", "./Keys"], function (require, exports, domready, Game_1, KeyHandler_1, Keys_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     domready(() => {
@@ -6,11 +6,25 @@ define(["require", "exports", "domready", "./Game", "./KeyHandler"], function (r
         const game = new Game_1.Game(keyHandler);
         const canvas = document.getElementById("canvas");
         canvas.addEventListener("keydown", (event) => {
-            keyHandler.SetKey(event.key, true);
+            keyHandler.SetKey(event.code, true);
+            if (event.code == Keys_1.Keys.SPACE) {
+                event.preventDefault();
+            }
         }, false);
         canvas.addEventListener("keyup", (event) => {
-            keyHandler.SetKey(event.key, false);
+            keyHandler.SetKey(event.code, false);
+            if (event.code == Keys_1.Keys.SPACE) {
+                event.preventDefault();
+            }
         }, false);
+        document.addEventListener("visibilitychange", () => {
+            if (document.hidden) {
+                game.Pause();
+            }
+            else {
+                game.Play();
+            }
+        });
         game.Run();
     });
 });

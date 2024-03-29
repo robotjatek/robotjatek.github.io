@@ -26,6 +26,11 @@ define(["require", "exports", "./WebGLUtils"], function (require, exports, WebGL
             this.valid = false;
             WebGLUtils_1.gl.deleteProgram(this.program);
         }
+        SetUniform(name, value) {
+            this.Use();
+            const location = WebGLUtils_1.gl.getUniformLocation(this.program, name);
+            WebGLUtils_1.gl.uniform2fv(location, value);
+        }
         createProgram(vertexId, fragment) {
             const program = WebGLUtils_1.gl.createProgram();
             WebGLUtils_1.gl.attachShader(program, vertexId);

@@ -26,7 +26,9 @@ define(["require", "exports", "gl-matrix", "./Background", "./Layer", "./Shader"
             const tile = new Tile_1.Tile(10, 11, texturePool.GetTexture("ground0.png"));
             const tile2 = new Tile_1.Tile(12, 11, texturePool.GetTexture("ground0.png"));
             const tile3 = new Tile_1.Tile(13, 11, texturePool.GetTexture("ground0.png"));
-            const tiles = [tile, tile2, tile3];
+            const tile4 = new Tile_1.Tile(5, 14, texturePool.GetTexture("ground0.png"));
+            const tile5 = new Tile_1.Tile(6, 14, texturePool.GetTexture("ground0.png"));
+            const tiles = [tile, tile2, tile3, tile4, tile5];
             // Bottom tiles of the level
             for (let j = Environment_1.Environment.VerticalTiles - 2; j < Environment_1.Environment.VerticalTiles; j++) {
                 for (let i = 0; i < Environment_1.Environment.HorizontalTiles; i++) {
@@ -42,6 +44,12 @@ define(["require", "exports", "gl-matrix", "./Background", "./Layer", "./Shader"
             this.Layers.forEach((layer) => {
                 layer.Draw(projectionMatrix, viewMatrix);
             });
+        }
+        CollideWidthLayer(boundingBox, layerId) {
+            return this.Layers[layerId].IsCollidingWidth(boundingBox);
+        }
+        get MainLayer() {
+            return this.Layers[0];
         }
     }
     exports.Level = Level;
