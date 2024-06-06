@@ -109,13 +109,51 @@ define("ICollider", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
 });
-define("ShaderPool", ["require", "exports"], function (require, exports) {
+define("Lock", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Lock = void 0;
+    class Lock {
+        constructor() {
+            // TODO: maybe there is a way to merge these two maps
+            this.waitMap = new Map();
+            this.lockMap = new Map();
+        }
+        async lock(key) {
+            return new Promise((resolve) => {
+                if (!this.lockMap.has(key) || !this.lockMap.get(key)) {
+                    this.lockMap.set(key, true);
+                    this.waitMap.set(key, []);
+                    resolve();
+                }
+                else {
+                    const waitQueue = this.waitMap.get(key);
+                    waitQueue.push(resolve);
+                }
+            });
+        }
+        async release(key) {
+            if (this.lockMap.get(key) && this.waitMap.get(key).length === 0) {
+                this.lockMap.set(key, false);
+                return;
+            }
+            const resolver = this.waitMap.get(key).shift();
+            return new Promise((res) => {
+                resolver();
+                res();
+            });
+        }
+    }
+    exports.Lock = Lock;
+});
+define("ShaderPool", ["require", "exports", "Lock"], function (require, exports, Lock_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.ShaderPool = void 0;
     class ShaderPool {
         constructor() {
             this.shaderSources = new Map();
+            this.lock = new Lock_1.Lock();
         }
         static GetInstance() {
             if (!this.instance) {
@@ -124,12 +162,15 @@ define("ShaderPool", ["require", "exports"], function (require, exports) {
             return this.instance;
         }
         async LoadShaderSource(path) {
+            await this.lock.lock(path);
             const source = this.shaderSources.get(path);
             if (!source) {
                 const loaded = await this.GetSourceFromUrl(path);
                 this.shaderSources.set(path, loaded);
+                await this.lock.release(path);
                 return loaded;
             }
+            await this.lock.release(path);
             return source;
         }
         async GetSourceFromUrl(url) {
@@ -343,7 +384,11 @@ define("Tile", ["require", "exports"], function (require, exports) {
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Tile = void 0;
     class Tile {
+        // TODO: position vector instead of primitives
         constructor(positionX, positionY, texture) {
+            this.positionX = positionX;
+            this.positionY = positionY;
+            this.texture = texture;
             this.positionX = positionX;
             this.positionY = positionY;
             this.texture = texture;
@@ -357,21 +402,21 @@ define("Tile", ["require", "exports"], function (require, exports) {
         get PositionY() {
             return this.positionY;
         }
-        isPointInside(point) {
+        IsPointInside(point, offsetX, offsetY) {
             // A tile is always 1x1
-            const minX = this.positionX;
-            const maxX = this.positionX + 1;
-            const minY = this.positionY;
-            const maxY = this.positionY + 1;
+            const minX = this.positionX + offsetX;
+            const maxX = this.positionX + offsetX + 1;
+            const minY = this.positionY + offsetY;
+            const maxY = this.positionY + offsetY + 1;
             return point[0] >= minX && point[0] <= maxX &&
                 point[1] >= minY && point[1] <= maxY;
         }
-        isCollindingWith(boundingBox) {
+        IsCollidingWith(boundingBox, offsetX, offsetY) {
             // A tile is always 1x1
-            const minX = this.positionX;
-            const maxX = this.positionX + 1;
-            const minY = this.positionY;
-            const maxY = this.positionY + 1;
+            const minX = this.positionX + offsetX;
+            const maxX = this.positionX + offsetX + 1;
+            const minY = this.positionY + offsetY;
+            const maxY = this.positionY + offsetY + 1;
             const bbMinX = boundingBox.position[0];
             const bbMaxX = boundingBox.position[0] + boundingBox.size[0];
             const bbMinY = boundingBox.position[1];
@@ -446,18 +491,46 @@ define("Layer", ["require", "exports", "Shader", "Sprite", "SpriteBatch", "Utils
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Layer = void 0;
     class Layer {
-        constructor(SpriteBatches, Tiles) {
+        constructor(SpriteBatches, Tiles, parallaxOffsetFactorX, parallaxOffsetFactorY, layerOffsetX, layerOffsetY) {
             this.SpriteBatches = SpriteBatches;
             this.Tiles = Tiles;
+            this.parallaxOffsetFactorX = parallaxOffsetFactorX;
+            this.parallaxOffsetFactorY = parallaxOffsetFactorY;
+            this.layerOffsetX = layerOffsetX;
+            this.layerOffsetY = layerOffsetY;
+            this.initialLayerOffsetX = layerOffsetX;
+            this.initialLayerOffsetY = layerOffsetY;
         }
-        static async Create(tiles) {
+        static async Create(tiles, parallaxOffsetFactorX, parallaxOffsetFactorY, layerOffsetX, layerOffsetY) {
             const tileMap = Layer.CreateTileMap(tiles);
             const batches = await Layer.CreateSpriteBatches(tileMap);
-            const layer = new Layer(batches, tiles);
+            const layer = new Layer(batches, tiles, parallaxOffsetFactorX, parallaxOffsetFactorY, layerOffsetX, layerOffsetY);
             return layer;
+        }
+        ResetState() {
+            this.layerOffsetX = this.initialLayerOffsetX;
+            this.layerOffsetY = this.initialLayerOffsetY;
         }
         get BoundingBox() {
             throw new Error('Method not implemented. Use IsColliding with instead');
+        }
+        get ParallaxOffsetFactorX() {
+            return this.parallaxOffsetFactorX;
+        }
+        get ParallaxOffsetFactorY() {
+            return this.parallaxOffsetFactorY;
+        }
+        get LayerOffsetX() {
+            return this.layerOffsetX;
+        }
+        get LayerOffsetY() {
+            return this.layerOffsetY;
+        }
+        set LayerOffsetX(offset) {
+            this.layerOffsetX = offset;
+        }
+        set LayerOffsetY(offset) {
+            this.layerOffsetY = offset;
         }
         IsCollidingWith(boundingBox, collideWithUndefined) {
             // Outside of the boundaries are considered as collisions when collideWithUndefined is true.
@@ -465,19 +538,19 @@ define("Layer", ["require", "exports", "Shader", "Sprite", "SpriteBatch", "Utils
             if (this.IsOutsideBoundary(boundingBox) && collideWithUndefined) {
                 return true;
             }
-            return this.Tiles.some(tiles => tiles.isCollindingWith(boundingBox));
+            return this.Tiles.some(tile => tile.IsCollidingWith(boundingBox, this.LayerOffsetX, this.LayerOffsetY));
         }
         get MaxX() {
-            return Math.max(...this.Tiles.map(t => t.PositionX), Environment_2.Environment.HorizontalTiles);
+            return Math.max(...this.Tiles.map(t => t.PositionX + 1), Environment_2.Environment.HorizontalTiles);
         }
         get MinX() {
             return Math.min(...this.Tiles.map(t => t.PositionX));
         }
         get MinY() {
-            return Math.min(...this.Tiles.map(t => t.PositionY), 0);
+            return Math.min(...this.Tiles.map(t => t.PositionY));
         }
         get MaxY() {
-            return Math.max(...this.Tiles.map(t => t.PositionY), Environment_2.Environment.VerticalTiles);
+            return Math.max(...this.Tiles.map(t => t.PositionY + 1));
         }
         IsOutsideBoundary(boundingBox) {
             const minX = this.MinX;
@@ -538,10 +611,17 @@ define("Camera", ["require", "exports", "gl-matrix", "Environment"], function (r
     class Camera {
         constructor(position) {
             this.position = position;
+            this.shake = false;
             this.viewMatrix = gl_matrix_4.mat4.create();
         }
         get ViewMatrix() {
             return this.viewMatrix;
+        }
+        get Shake() {
+            return this.shake;
+        }
+        set Shake(value) {
+            this.shake = value;
         }
         /**
          * The camera centers its view on the given position with its viewport confined in the boundaries of the given layer
@@ -549,8 +629,10 @@ define("Camera", ["require", "exports", "gl-matrix", "Environment"], function (r
          * @param layer The layer where the camera's viewport is confined in
          */
         LookAtPosition(position, layer) {
-            position[0] = this.Clamp(position[0], layer.MinX + Environment_3.Environment.HorizontalTiles / 2, layer.MaxX - Environment_3.Environment.HorizontalTiles / 2);
-            position[1] = this.Clamp(position[1], layer.MinY + Environment_3.Environment.VerticalTiles / 2, layer.MaxY - Environment_3.Environment.VerticalTiles / 2);
+            const xShake = this.shake ? Math.random() * (0.2 - 0.1) + 0.1 : 0;
+            const yShake = this.shake ? Math.random() * (0.2 - 0.1) + 0.1 : 0;
+            position[0] = this.Clamp(position[0], layer.MinX + Environment_3.Environment.HorizontalTiles / 2, layer.MaxX - Environment_3.Environment.HorizontalTiles / 2) + xShake;
+            position[1] = this.Clamp(position[1], layer.MinY - Environment_3.Environment.VerticalTiles / 2, layer.MaxY - Environment_3.Environment.VerticalTiles / 2) + yShake;
             gl_matrix_4.mat4.translate(this.viewMatrix, gl_matrix_4.mat4.create(), gl_matrix_4.vec3.fromValues(-position[0] + Environment_3.Environment.HorizontalTiles / 2, -position[1] + Environment_3.Environment.VerticalTiles / 2, 0));
             this.position = position;
         }
@@ -587,13 +669,14 @@ define("ControllerHandler", ["require", "exports", "gl-matrix"], function (requi
     }
     exports.ControllerHandler = ControllerHandler;
 });
-define("TexturePool", ["require", "exports", "Texture"], function (require, exports, Texture_1) {
+define("TexturePool", ["require", "exports", "Lock", "Texture"], function (require, exports, Lock_2, Texture_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.TexturePool = void 0;
     class TexturePool {
         constructor() {
             this.textures = new Map();
+            this.lock = new Lock_2.Lock();
         }
         static GetInstance() {
             if (!this.Instance) {
@@ -602,12 +685,15 @@ define("TexturePool", ["require", "exports", "Texture"], function (require, expo
             return this.Instance;
         }
         async GetTexture(path) {
+            await this.lock.lock(path);
             const texture = this.textures.get(path);
             if (!texture) {
                 const created = await Texture_1.Texture.Create(path);
                 this.textures.set(path, created);
+                await this.lock.release(path);
                 return created;
             }
+            await this.lock.release(path);
             return texture;
         }
         ClearPool() {
@@ -647,207 +733,24 @@ define("TexturePool", ["require", "exports", "Texture"], function (require, expo
     }
     exports.TexturePool = TexturePool;
 });
-define("Textbox", ["require", "exports", "gl-matrix", "Shader", "TexturePool", "Utils", "Sprite", "SpriteBatch", "WebGLUtils", "FontConfigPool"], function (require, exports, gl_matrix_6, Shader_2, TexturePool_1, Utils_2, Sprite_4, SpriteBatch_2, WebGLUtils_4, FontConfigPool_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Textbox = exports.FontConfig = void 0;
-    class CharProperties {
-    }
-    class FontConfig {
-        constructor(characters) {
-            this.characters = characters;
-        }
-        static async Create(fontPath) {
-            const jsonString = await (await fetch(fontPath)).text();
-            const parsedTopLevel = JSON.parse(jsonString);
-            const topLevelEntries = Object.entries(parsedTopLevel);
-            const topLevelMap = new Map(topLevelEntries);
-            const charJson = JSON.stringify(topLevelMap.get('characters'));
-            const e = Object.entries(JSON.parse(charJson));
-            const chars = new Map(e);
-            return new FontConfig(chars);
-        }
-    }
-    exports.FontConfig = FontConfig;
-    class Character {
-        get Advance() {
-            return this._advance;
-        }
-        get Sprite() {
-            return this.sprite;
-        }
-        constructor(shader, fontMap, charConfig, position, scale) {
-            this.shader = shader;
-            this.fontMap = fontMap;
-            this.charConfig = charConfig;
-            this.position = position;
-            this.scale = scale;
-            this._advance = charConfig.advance * scale;
-            const height = charConfig.height * scale;
-            const width = charConfig.width * scale;
-            const originX = charConfig.originX * scale;
-            const originY = charConfig.originY * scale;
-            const originYOffset = height - originY;
-            const bottomY = position[1] + originYOffset;
-            const topY = bottomY - height;
-            const left = position[0] - originX;
-            const vertices = Utils_2.Utils.CreateCharacterVertices(gl_matrix_6.vec2.fromValues(left, topY), width, height);
-            const s = charConfig.x / fontMap.Width;
-            const t = charConfig.y / fontMap.Height;
-            const uvs = Utils_2.Utils.CreateTextureCoordinates(s, t, charConfig.width / fontMap.Width, charConfig.height / fontMap.Height);
-            this.sprite = new Sprite_4.Sprite(vertices, uvs);
-        }
-    }
-    class Textbox {
-        constructor(fontMap, shader, fontConfig) {
-            this.fontMap = fontMap;
-            this.shader = shader;
-            this.fontConfig = fontConfig;
-            this.text = [];
-            this.cursorX = 0;
-            this.maxCharacterHeight = 0;
-        }
-        static async Create(fontname) {
-            const shader = await Shader_2.Shader.Create('shaders/VertexShader.vert', 'shaders/Font.frag');
-            const fontMap = await TexturePool_1.TexturePool.GetInstance().GetTexture(`textures/Fonts/${fontname}/font.png`);
-            const fontConfig = await FontConfigPool_1.FontConfigPool.GetInstance().GetFontConfig(`textures/Fonts/${fontname}/font.json`);
-            return new Textbox(fontMap, shader, fontConfig)
-                .WithHue(1).WithSaturation(0).WithValue(1);
-        }
-        WithText(text, position, scale = 1.0) {
-            this.text = [];
-            this.cursorX = 0;
-            this.position = position;
-            const heights = [...this.fontConfig.characters.values()]
-                .map(c => c.height);
-            this.maxCharacterHeight = Math.max(...heights) * scale;
-            for (const character of text) {
-                const charConfig = this.fontConfig.characters.get(character);
-                const charPos = gl_matrix_6.vec2.fromValues(position[0] + this.cursorX, position[1] + this.maxCharacterHeight);
-                const renderableChar = new Character(this.shader, this.fontMap, charConfig, charPos, scale);
-                this.text.push(renderableChar);
-                this.cursorX += renderableChar.Advance;
-            }
-            return this;
-        }
-        WithHue(hue) {
-            this.shader.SetFloatUniform('hue', hue);
-            return this;
-        }
-        WithSaturation(saturation) {
-            this.shader.SetFloatUniform('saturation', saturation);
-            return this;
-        }
-        WithValue(value) {
-            this.shader.SetFloatUniform('value', value);
-            return this;
-        }
-        Draw(proj) {
-            WebGLUtils_4.gl.enable(WebGLUtils_4.gl.BLEND);
-            const sprites = this.text.map(t => t.Sprite);
-            const batch = new SpriteBatch_2.SpriteBatch(this.shader, sprites, this.fontMap); // TODO: recreating & destroying the batch in every frame seems very wasteful
-            batch.Draw(proj, gl_matrix_6.mat4.create());
-            batch.Dispose();
-            WebGLUtils_4.gl.disable(WebGLUtils_4.gl.BLEND);
-        }
-        get Width() {
-            return this.cursorX + this.position[0];
-        }
-        get Height() {
-            return this.maxCharacterHeight;
-        }
-        /**
-         * Helper function to predetermine the size of a textbox without creating and rendering one
-         * @param text The text to 'prerender'
-         * @param font The font that the text will be rendered in
-         * @returns An object containing the width and height of the rendered textbox
-         */
-        static async PrecalculateDimensions(font, text, scale) {
-            const fontConfig = await FontConfigPool_1.FontConfigPool.GetInstance().GetFontConfig(`textures/Fonts/${font}/font.json`);
-            let cursorX = 0;
-            const heights = [...fontConfig.characters.values()]
-                .map(c => c.height);
-            const maxCharacterHeight = Math.max(...heights) * scale;
-            for (const character of text) {
-                const charConfig = fontConfig.characters.get(character);
-                cursorX += charConfig.advance * scale;
-            }
-            return { width: cursorX, height: maxCharacterHeight };
-        }
-        Dispose() {
-            this.shader.Delete();
-        }
-    }
-    exports.Textbox = Textbox;
-});
-define("FontConfigPool", ["require", "exports", "Textbox"], function (require, exports, Textbox_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.FontConfigPool = void 0;
-    class FontConfigPool {
-        constructor() {
-            this.configs = new Map();
-        }
-        static GetInstance() {
-            if (!this.instance) {
-                this.instance = new FontConfigPool();
-            }
-            return this.instance;
-        }
-        async GetFontConfig(fontPath) {
-            const config = this.configs.get(fontPath);
-            if (!config) {
-                const created = await Textbox_1.FontConfig.Create(fontPath);
-                this.configs.set(fontPath, created);
-                return created;
-            }
-            return config;
-        }
-        async PreLoad() {
-        }
-        UnloadAll() {
-            this.configs.clear();
-        }
-    }
-    exports.FontConfigPool = FontConfigPool;
-});
-define("KeyHandler", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.KeyHandler = void 0;
-    class KeyHandler {
-        constructor() {
-            this.keys = new Map();
-        }
-        SetKey(code, state) {
-            this.keys.set(code, state);
-        }
-        IsPressed(code) {
-            if (this.keys.has(code)) {
-                return this.keys.get(code);
-            }
-            return false;
-        }
-    }
-    exports.KeyHandler = KeyHandler;
-});
 define("SoundEffect", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.SoundEffect = void 0;
     class SoundEffect {
-        constructor(blob, allowMultiple = true) {
+        constructor(buffer, context, allowMultiple = true, path) {
+            this.buffer = buffer;
+            this.context = context;
             this.allowMultiple = allowMultiple;
-            this.context = new AudioContext();
+            this.path = path;
             this.playing = false;
             this.loop = false;
-            this.context.decodeAudioData(blob, (data) => {
-                this.buffer = data;
-            });
         }
         static async Create(path, allowMultiple = true) {
-            const blob = await (await fetch(path)).arrayBuffer();
-            return new SoundEffect(blob, allowMultiple);
+            const blob = await ((await fetch(path)).arrayBuffer());
+            const context = new AudioContext();
+            const buffer = await context.decodeAudioData(blob);
+            return new SoundEffect(buffer, context, allowMultiple, path);
         }
         Play(playbackRate = 1, volume = 1, onEndCallback = null, loop = false) {
             if ((!this.playing || this.allowMultiple) && this.buffer) {
@@ -882,16 +785,20 @@ define("SoundEffect", ["require", "exports"], function (require, exports) {
             if (this.gainNode)
                 this.gainNode.gain.value = volume;
         }
+        get Path() {
+            return this.path;
+        }
     }
     exports.SoundEffect = SoundEffect;
 });
-define("SoundEffectPool", ["require", "exports", "SoundEffect"], function (require, exports, SoundEffect_1) {
+define("SoundEffectPool", ["require", "exports", "Lock", "SoundEffect"], function (require, exports, Lock_3, SoundEffect_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.SoundEffectPool = void 0;
     class SoundEffectPool {
         constructor() {
             this.effects = new Map();
+            this.lock = new Lock_3.Lock();
         }
         static GetInstance() {
             if (!this.instance) {
@@ -901,17 +808,19 @@ define("SoundEffectPool", ["require", "exports", "SoundEffect"], function (requi
         }
         // TODO:key should be path + allowparallel pair
         async GetAudio(path, allowParallel = true) {
+            await this.lock.lock(path);
             const effect = this.effects.get(path);
             if (!effect) {
                 const created = await SoundEffect_1.SoundEffect.Create(path, allowParallel);
                 this.effects.set(path, created);
+                await this.lock.release(path);
                 return created;
             }
+            await this.lock.release(path);
             return effect;
         }
         async Preload() {
             await Promise.all([
-                this.GetAudio('audio/level.mp3', false),
                 this.GetAudio('audio/fireball_spawn.mp3'),
                 this.GetAudio('audio/sword.mp3'),
                 this.GetAudio('audio/enemy_damage.wav'),
@@ -959,7 +868,7 @@ define("Enemies/IEnemy", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
 });
-define("Enemies/SlimeEnemy", ["require", "exports", "gl-matrix", "Sprite", "Utils", "SpriteBatch", "Shader", "TexturePool", "BoundingBox", "SoundEffectPool", "Waypoint"], function (require, exports, gl_matrix_7, Sprite_5, Utils_3, SpriteBatch_3, Shader_3, TexturePool_2, BoundingBox_1, SoundEffectPool_1, Waypoint_1) {
+define("Enemies/SlimeEnemy", ["require", "exports", "gl-matrix", "Sprite", "Utils", "SpriteBatch", "Shader", "TexturePool", "BoundingBox", "SoundEffectPool", "Waypoint"], function (require, exports, gl_matrix_6, Sprite_4, Utils_2, SpriteBatch_2, Shader_2, TexturePool_1, BoundingBox_1, SoundEffectPool_1, Waypoint_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.SlimeEnemy = void 0;
@@ -984,41 +893,41 @@ define("Enemies/SlimeEnemy", ["require", "exports", "gl-matrix", "Sprite", "Util
             this.currentFrameTime = 0;
             this.currentAnimationFrame = 0;
             this.leftFacingAnimationFrames = [
-                gl_matrix_7.vec2.fromValues(0 / 12, 3 / 8),
-                gl_matrix_7.vec2.fromValues(1 / 12, 3 / 8),
-                gl_matrix_7.vec2.fromValues(2 / 12, 3 / 8),
+                gl_matrix_6.vec2.fromValues(0 / 12, 3 / 8),
+                gl_matrix_6.vec2.fromValues(1 / 12, 3 / 8),
+                gl_matrix_6.vec2.fromValues(2 / 12, 3 / 8),
             ];
             this.rightFacingAnimationFrames = [
-                gl_matrix_7.vec2.fromValues(0 / 12, 1 / 8),
-                gl_matrix_7.vec2.fromValues(1 / 12, 1 / 8),
-                gl_matrix_7.vec2.fromValues(2 / 12, 1 / 8),
+                gl_matrix_6.vec2.fromValues(0 / 12, 1 / 8),
+                gl_matrix_6.vec2.fromValues(1 / 12, 1 / 8),
+                gl_matrix_6.vec2.fromValues(2 / 12, 1 / 8),
             ];
             this.currentFrameSet = this.leftFacingAnimationFrames;
-            this.velocity = gl_matrix_7.vec3.fromValues(0, 0, 0);
-            this.sprite = new Sprite_5.Sprite(Utils_3.Utils.DefaultSpriteVertices, Utils_3.Utils.CreateTextureCoordinates(0.0 / 12.0, // These constants are hardcoded with "monster1.png" in mind
+            this.velocity = gl_matrix_6.vec3.fromValues(0, 0, 0);
+            this.sprite = new Sprite_4.Sprite(Utils_2.Utils.DefaultSpriteVertices, Utils_2.Utils.CreateTextureCoordinates(0.0 / 12.0, // These constants are hardcoded with "monster1.png" in mind
             0.0 / 8.0, 1.0 / 12.0, 1.0 / 8.0));
-            this.batch = new SpriteBatch_3.SpriteBatch(this.shader, [this.sprite], this.texture);
+            this.batch = new SpriteBatch_2.SpriteBatch(this.shader, [this.sprite], this.texture);
             this.health = 3;
             this.damagedTime = 0;
             this.damaged = false;
-            this.bbOffset = gl_matrix_7.vec3.fromValues(1.2, 1.8, 0);
-            this.bbSize = gl_matrix_7.vec2.fromValues(0.8, 1.0);
-            this.bbSprite = new Sprite_5.Sprite(Utils_3.Utils.DefaultSpriteVertices, Utils_3.Utils.DefaultSpriteTextureCoordinates);
-            this.bbBatch = new SpriteBatch_3.SpriteBatch(this.bbShader, [this.bbSprite], null);
-            this.lastPosition = gl_matrix_7.vec3.create(); // If lastPosition is the same as position at initialization, the entity slowly falls through the floor
+            this.bbOffset = gl_matrix_6.vec3.fromValues(1.2, 1.8, 0);
+            this.bbSize = gl_matrix_6.vec2.fromValues(0.8, 1.0);
+            this.bbSprite = new Sprite_4.Sprite(Utils_2.Utils.DefaultSpriteVertices, Utils_2.Utils.DefaultSpriteTextureCoordinates);
+            this.bbBatch = new SpriteBatch_2.SpriteBatch(this.bbShader, [this.bbSprite], null);
+            this.lastPosition = gl_matrix_6.vec3.create(); // If lastPosition is the same as position at initialization, the entity slowly falls through the floor
             // For now slimes walk between their start position and an other position with some constant offset
             const originalWaypoint = new Waypoint_1.Waypoint(this.position);
-            const targetPosition = gl_matrix_7.vec3.add(gl_matrix_7.vec3.create(), this.position, gl_matrix_7.vec3.fromValues(-6, 0, 0));
+            const targetPosition = gl_matrix_6.vec3.add(gl_matrix_6.vec3.create(), this.position, gl_matrix_6.vec3.fromValues(-6, 0, 0));
             this.targetWaypoint = new Waypoint_1.Waypoint(targetPosition);
             this.targetWaypoint.next = originalWaypoint;
             originalWaypoint.next = this.targetWaypoint;
         }
         static async Create(position, visualScale, collider, onDeath) {
-            const shader = await Shader_3.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
-            const bbShader = await Shader_3.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
+            const shader = await Shader_2.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
+            const bbShader = await Shader_2.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
             const enemyDamageSound = await SoundEffectPool_1.SoundEffectPool.GetInstance().GetAudio('audio/enemy_damage.wav');
             const enemyDeathSound = await SoundEffectPool_1.SoundEffectPool.GetInstance().GetAudio('audio/enemy_death.wav');
-            const texture = await TexturePool_2.TexturePool.GetInstance().GetTexture('textures/monster1.png');
+            const texture = await TexturePool_1.TexturePool.GetInstance().GetTexture('textures/monster1.png');
             return new SlimeEnemy(position, shader, bbShader, visualScale, collider, onDeath, enemyDamageSound, enemyDeathSound, texture);
         }
         Visit(hero) {
@@ -1031,7 +940,7 @@ define("Enemies/SlimeEnemy", ["require", "exports", "gl-matrix", "Sprite", "Util
             return this.position;
         }
         get BoundingBox() {
-            return new BoundingBox_1.BoundingBox(gl_matrix_7.vec3.add(gl_matrix_7.vec3.create(), this.position, this.bbOffset), this.bbSize);
+            return new BoundingBox_1.BoundingBox(gl_matrix_6.vec3.add(gl_matrix_6.vec3.create(), this.position, this.bbOffset), this.bbSize);
         }
         get EndCondition() {
             return false;
@@ -1045,8 +954,8 @@ define("Enemies/SlimeEnemy", ["require", "exports", "gl-matrix", "Sprite", "Util
         Damage(pushbackForce) {
             this.enemyDamageSound.Play();
             this.health--;
-            this.shader.SetVec4Uniform('colorOverlay', gl_matrix_7.vec4.fromValues(1, 0, 0, 0));
-            gl_matrix_7.vec3.set(this.velocity, pushbackForce[0], pushbackForce[1], 0);
+            this.shader.SetVec4Uniform('colorOverlay', gl_matrix_6.vec4.fromValues(1, 0, 0, 0));
+            gl_matrix_6.vec3.set(this.velocity, pushbackForce[0], pushbackForce[1], 0);
             this.damaged = true;
             if (this.health <= 0) {
                 if (this.onDeath) {
@@ -1057,18 +966,18 @@ define("Enemies/SlimeEnemy", ["require", "exports", "gl-matrix", "Sprite", "Util
         }
         Draw(proj, view) {
             this.batch.Draw(proj, view);
-            this.batch.ModelMatrix = gl_matrix_7.mat4.create();
-            gl_matrix_7.mat4.translate(this.batch.ModelMatrix, this.batch.ModelMatrix, this.position);
-            gl_matrix_7.mat4.scale(this.batch.ModelMatrix, this.batch.ModelMatrix, gl_matrix_7.vec3.fromValues(this.visualScale[0], this.visualScale[1], 1));
+            this.batch.ModelMatrix = gl_matrix_6.mat4.create();
+            gl_matrix_6.mat4.translate(this.batch.ModelMatrix, this.batch.ModelMatrix, this.position);
+            gl_matrix_6.mat4.scale(this.batch.ModelMatrix, this.batch.ModelMatrix, gl_matrix_6.vec3.fromValues(this.visualScale[0], this.visualScale[1], 1));
             this.bbBatch.Draw(proj, view);
-            gl_matrix_7.mat4.translate(this.bbBatch.ModelMatrix, gl_matrix_7.mat4.create(), this.BoundingBox.position);
-            gl_matrix_7.mat4.scale(this.bbBatch.ModelMatrix, this.bbBatch.ModelMatrix, gl_matrix_7.vec3.fromValues(this.bbSize[0], this.bbSize[1], 1));
+            gl_matrix_6.mat4.translate(this.bbBatch.ModelMatrix, gl_matrix_6.mat4.create(), this.BoundingBox.position);
+            gl_matrix_6.mat4.scale(this.bbBatch.ModelMatrix, this.bbBatch.ModelMatrix, gl_matrix_6.vec3.fromValues(this.bbSize[0], this.bbSize[1], 1));
         }
         async Update(delta) {
             this.RemoveDamageOverlayAfter(delta, 1. / 60 * 1000 * 15);
             this.MoveTowardsNextWaypoint(delta);
             this.Animate(delta);
-            gl_matrix_7.vec3.copy(this.lastPosition, this.position);
+            gl_matrix_6.vec3.copy(this.lastPosition, this.position);
             this.ApplyGravityToVelocity(delta);
             this.ApplyVelocityToPosition(delta);
             this.HandleCollisionWithCollider();
@@ -1081,11 +990,11 @@ define("Enemies/SlimeEnemy", ["require", "exports", "gl-matrix", "Sprite", "Util
             if (this.damagedTime > showOverlayTime) {
                 this.damagedTime = 0;
                 this.damaged = false;
-                this.shader.SetVec4Uniform('colorOverlay', gl_matrix_7.vec4.create());
+                this.shader.SetVec4Uniform('colorOverlay', gl_matrix_6.vec4.create());
             }
         }
         MoveTowardsNextWaypoint(delta) {
-            const dir = gl_matrix_7.vec3.sub(gl_matrix_7.vec3.create(), this.position, this.targetWaypoint.position);
+            const dir = gl_matrix_6.vec3.sub(gl_matrix_6.vec3.create(), this.position, this.targetWaypoint.position);
             if (dir[0] < 0) {
                 this.ChangeFrameSet(this.rightFacingAnimationFrames);
                 this.MoveOnX(this.movementSpeed, delta);
@@ -1094,7 +1003,7 @@ define("Enemies/SlimeEnemy", ["require", "exports", "gl-matrix", "Sprite", "Util
                 this.ChangeFrameSet(this.leftFacingAnimationFrames);
                 this.MoveOnX(-this.movementSpeed, delta);
             }
-            if (gl_matrix_7.vec3.distance(this.position, this.targetWaypoint.position) < 0.25) {
+            if (gl_matrix_6.vec3.distance(this.position, this.targetWaypoint.position) < 0.25) {
                 this.targetWaypoint = this.targetWaypoint.next;
             }
         }
@@ -1106,13 +1015,13 @@ define("Enemies/SlimeEnemy", ["require", "exports", "gl-matrix", "Sprite", "Util
             this.sprite.textureOffset = this.currentFrameSet[this.currentAnimationFrame];
         }
         MoveOnX(amount, delta) {
-            const nextPosition = gl_matrix_7.vec3.fromValues(this.position[0] + amount * delta, this.position[1], this.position[2]);
+            const nextPosition = gl_matrix_6.vec3.fromValues(this.position[0] + amount * delta, this.position[1], this.position[2]);
             if (!this.checkCollision(nextPosition)) {
                 this.position = nextPosition;
             }
         }
         checkCollision(nextPosition) {
-            const nextBbPos = gl_matrix_7.vec3.add(gl_matrix_7.vec3.create(), nextPosition, this.bbOffset);
+            const nextBbPos = gl_matrix_6.vec3.add(gl_matrix_6.vec3.create(), nextPosition, this.bbOffset);
             const nextBoundingBox = new BoundingBox_1.BoundingBox(nextBbPos, this.bbSize);
             return this.collider.IsCollidingWith(nextBoundingBox, true);
         }
@@ -1130,22 +1039,22 @@ define("Enemies/SlimeEnemy", ["require", "exports", "gl-matrix", "Sprite", "Util
         }
         // TODO: should make this a component system
         ApplyGravityToVelocity(delta) {
-            const gravity = gl_matrix_7.vec3.fromValues(0, 0.00004, 0);
-            gl_matrix_7.vec3.add(this.velocity, this.velocity, gl_matrix_7.vec3.scale(gl_matrix_7.vec3.create(), gravity, delta));
+            const gravity = gl_matrix_6.vec3.fromValues(0, 0.00004, 0);
+            gl_matrix_6.vec3.add(this.velocity, this.velocity, gl_matrix_6.vec3.scale(gl_matrix_6.vec3.create(), gravity, delta));
         }
         // TODO: make this a component system
         ApplyVelocityToPosition(delta) {
             // TODO: check if next position causes a collision. Do not apply velocity if collision happens
-            const moveValue = gl_matrix_7.vec3.create();
-            gl_matrix_7.vec3.scale(moveValue, this.velocity, delta);
-            gl_matrix_7.vec3.add(this.position, this.position, moveValue);
+            const moveValue = gl_matrix_6.vec3.create();
+            gl_matrix_6.vec3.scale(moveValue, this.velocity, delta);
+            gl_matrix_6.vec3.add(this.position, this.position, moveValue);
         }
         // TODO: how to make this a component?
         HandleCollisionWithCollider() {
             const colliding = this.collider.IsCollidingWith(this.BoundingBox, false);
             if (colliding) {
-                gl_matrix_7.vec3.copy(this.position, this.lastPosition);
-                this.velocity = gl_matrix_7.vec3.create();
+                gl_matrix_6.vec3.copy(this.position, this.lastPosition);
+                this.velocity = gl_matrix_6.vec3.create();
             }
         }
         Dispose() {
@@ -1157,7 +1066,7 @@ define("Enemies/SlimeEnemy", ["require", "exports", "gl-matrix", "Sprite", "Util
     }
     exports.SlimeEnemy = SlimeEnemy;
 });
-define("Projectiles/Fireball", ["require", "exports", "gl-matrix", "BoundingBox", "Shader", "Sprite", "SpriteBatch", "TexturePool", "Utils", "SoundEffectPool"], function (require, exports, gl_matrix_8, BoundingBox_2, Shader_4, Sprite_6, SpriteBatch_4, TexturePool_3, Utils_4, SoundEffectPool_2) {
+define("Projectiles/Fireball", ["require", "exports", "gl-matrix", "BoundingBox", "Shader", "Sprite", "SpriteBatch", "TexturePool", "Utils", "SoundEffectPool"], function (require, exports, gl_matrix_7, BoundingBox_2, Shader_3, Sprite_5, SpriteBatch_3, TexturePool_2, Utils_3, SoundEffectPool_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Fireball = void 0;
@@ -1174,50 +1083,50 @@ define("Projectiles/Fireball", ["require", "exports", "gl-matrix", "BoundingBox"
             this.OnHitListeners = [];
             this.spawnSoundPlayed = false;
             this.alreadyHit = false;
-            this.visualScale = gl_matrix_8.vec2.fromValues(3, 3);
+            this.visualScale = gl_matrix_7.vec2.fromValues(3, 3);
             // Animation related
             this.currentFrameTime = 0;
             this.currentAnimationFrameIndex = 0;
             this.leftFacingAnimationFrames = [
-                gl_matrix_8.vec2.fromValues(0 / 8, 0 / 8),
-                gl_matrix_8.vec2.fromValues(1 / 8, 0 / 8),
-                gl_matrix_8.vec2.fromValues(2 / 8, 0 / 8),
-                gl_matrix_8.vec2.fromValues(3 / 8, 0 / 8),
-                gl_matrix_8.vec2.fromValues(4 / 8, 0 / 8),
-                gl_matrix_8.vec2.fromValues(5 / 8, 0 / 8),
-                gl_matrix_8.vec2.fromValues(6 / 8, 0 / 8),
-                gl_matrix_8.vec2.fromValues(7 / 8, 0 / 8),
+                gl_matrix_7.vec2.fromValues(0 / 8, 0 / 8),
+                gl_matrix_7.vec2.fromValues(1 / 8, 0 / 8),
+                gl_matrix_7.vec2.fromValues(2 / 8, 0 / 8),
+                gl_matrix_7.vec2.fromValues(3 / 8, 0 / 8),
+                gl_matrix_7.vec2.fromValues(4 / 8, 0 / 8),
+                gl_matrix_7.vec2.fromValues(5 / 8, 0 / 8),
+                gl_matrix_7.vec2.fromValues(6 / 8, 0 / 8),
+                gl_matrix_7.vec2.fromValues(7 / 8, 0 / 8),
             ];
             this.rightFacingAnimationFrames = [
-                gl_matrix_8.vec2.fromValues(0 / 8, 4 / 8),
-                gl_matrix_8.vec2.fromValues(1 / 8, 4 / 8),
-                gl_matrix_8.vec2.fromValues(2 / 8, 4 / 8),
-                gl_matrix_8.vec2.fromValues(3 / 8, 4 / 8),
-                gl_matrix_8.vec2.fromValues(4 / 8, 4 / 8),
-                gl_matrix_8.vec2.fromValues(5 / 8, 4 / 8),
-                gl_matrix_8.vec2.fromValues(6 / 8, 4 / 8),
-                gl_matrix_8.vec2.fromValues(7 / 8, 4 / 8),
+                gl_matrix_7.vec2.fromValues(0 / 8, 4 / 8),
+                gl_matrix_7.vec2.fromValues(1 / 8, 4 / 8),
+                gl_matrix_7.vec2.fromValues(2 / 8, 4 / 8),
+                gl_matrix_7.vec2.fromValues(3 / 8, 4 / 8),
+                gl_matrix_7.vec2.fromValues(4 / 8, 4 / 8),
+                gl_matrix_7.vec2.fromValues(5 / 8, 4 / 8),
+                gl_matrix_7.vec2.fromValues(6 / 8, 4 / 8),
+                gl_matrix_7.vec2.fromValues(7 / 8, 4 / 8),
             ];
             this.currentFrameSet = this.leftFacingAnimationFrames;
-            this.sprite = new Sprite_6.Sprite(Utils_4.Utils.DefaultSpriteVertices, Utils_4.Utils.CreateTextureCoordinates(0, 0, 1 / 8, 1 / 8));
-            this.batch = new SpriteBatch_4.SpriteBatch(this.shader, [this.sprite], this.texture);
+            this.sprite = new Sprite_5.Sprite(Utils_3.Utils.DefaultSpriteVertices, Utils_3.Utils.CreateTextureCoordinates(0, 0, 1 / 8, 1 / 8));
+            this.batch = new SpriteBatch_3.SpriteBatch(this.shader, [this.sprite], this.texture);
             // TODO: altough i dont use bbOffset here I kept all duplicated code nearly the same, to make refactors easier
-            this.bbOffset = gl_matrix_8.vec3.fromValues(0, 0, 0);
-            this.bbSize = gl_matrix_8.vec2.fromValues(2.0, 1.0);
-            this.bbSprite = new Sprite_6.Sprite(Utils_4.Utils.DefaultSpriteVertices, Utils_4.Utils.DefaultSpriteTextureCoordinates);
-            this.bbBatch = new SpriteBatch_4.SpriteBatch(this.bbShader, [this.bbSprite], null);
-            this.shader.SetVec4Uniform('clr', gl_matrix_8.vec4.fromValues(0, 1, 0, 0.4));
-            this.bbShader.SetVec4Uniform('clr', gl_matrix_8.vec4.fromValues(1, 0, 0, 0.4));
+            this.bbOffset = gl_matrix_7.vec3.fromValues(0, 0, 0);
+            this.bbSize = gl_matrix_7.vec2.fromValues(2.0, 1.0);
+            this.bbSprite = new Sprite_5.Sprite(Utils_3.Utils.DefaultSpriteVertices, Utils_3.Utils.DefaultSpriteTextureCoordinates);
+            this.bbBatch = new SpriteBatch_3.SpriteBatch(this.bbShader, [this.bbSprite], null);
+            this.shader.SetVec4Uniform('clr', gl_matrix_7.vec4.fromValues(0, 1, 0, 0.4));
+            this.bbShader.SetVec4Uniform('clr', gl_matrix_7.vec4.fromValues(1, 0, 0, 0.4));
         }
         CollideWithAttack(attack) {
             this.OnHit();
         }
         static async Create(centerPosition, moveDirection, collider) {
-            const shader = await Shader_4.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
-            const bbShader = await Shader_4.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
+            const shader = await Shader_3.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
+            const bbShader = await Shader_3.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
             const hitSound = await SoundEffectPool_2.SoundEffectPool.GetInstance().GetAudio('audio/hero_stomp.wav');
             const spawnSound = await SoundEffectPool_2.SoundEffectPool.GetInstance().GetAudio('audio/fireball_spawn.mp3');
-            const texture = await TexturePool_3.TexturePool.GetInstance().GetTexture('textures/fireball.png');
+            const texture = await TexturePool_2.TexturePool.GetInstance().GetTexture('textures/fireball.png');
             return new Fireball(centerPosition, moveDirection, collider, shader, bbShader, hitSound, spawnSound, texture);
         }
         get EndCondition() {
@@ -1231,22 +1140,22 @@ define("Projectiles/Fireball", ["require", "exports", "gl-matrix", "BoundingBox"
             this.alreadyHit = true;
         }
         get BoundingBox() {
-            const topLeftCorner = gl_matrix_8.vec3.sub(gl_matrix_8.vec3.create(), this.centerPosition, gl_matrix_8.vec3.fromValues(this.bbSize[0] / 2, this.bbSize[1] / 2, 0));
-            const bbPos = gl_matrix_8.vec3.add(gl_matrix_8.vec3.create(), topLeftCorner, this.bbOffset); // Adjust bb position with the offset
+            const topLeftCorner = gl_matrix_7.vec3.sub(gl_matrix_7.vec3.create(), this.centerPosition, gl_matrix_7.vec3.fromValues(this.bbSize[0] / 2, this.bbSize[1] / 2, 0));
+            const bbPos = gl_matrix_7.vec3.add(gl_matrix_7.vec3.create(), topLeftCorner, this.bbOffset); // Adjust bb position with the offset
             return new BoundingBox_2.BoundingBox(bbPos, this.bbSize);
         }
         get PushbackForce() {
             // No pushback from a fireball
-            return gl_matrix_8.vec3.create();
+            return gl_matrix_7.vec3.create();
         }
         Visit(hero) {
             hero.InteractWithProjectile(this);
         }
         Draw(proj, view) {
             if (!this.alreadyHit) {
-                const topleft = gl_matrix_8.vec3.sub(gl_matrix_8.vec3.create(), this.centerPosition, gl_matrix_8.vec3.fromValues(this.visualScale[0] / 2, this.visualScale[1] / 2, 0));
-                gl_matrix_8.mat4.translate(this.batch.ModelMatrix, gl_matrix_8.mat4.create(), topleft);
-                gl_matrix_8.mat4.scale(this.batch.ModelMatrix, this.batch.ModelMatrix, gl_matrix_8.vec3.fromValues(this.visualScale[0], this.visualScale[1], 1));
+                const topleft = gl_matrix_7.vec3.sub(gl_matrix_7.vec3.create(), this.centerPosition, gl_matrix_7.vec3.fromValues(this.visualScale[0] / 2, this.visualScale[1] / 2, 0));
+                gl_matrix_7.mat4.translate(this.batch.ModelMatrix, gl_matrix_7.mat4.create(), topleft);
+                gl_matrix_7.mat4.scale(this.batch.ModelMatrix, this.batch.ModelMatrix, gl_matrix_7.vec3.fromValues(this.visualScale[0], this.visualScale[1], 1));
                 this.batch.Draw(proj, view);
             }
             // Draw bb
@@ -1289,7 +1198,7 @@ define("Projectiles/Fireball", ["require", "exports", "gl-matrix", "BoundingBox"
             }
         }
         MoveOnX(amount, delta) {
-            const nextCenterPosition = gl_matrix_8.vec3.fromValues(this.centerPosition[0] + amount * delta, this.centerPosition[1], 0);
+            const nextCenterPosition = gl_matrix_7.vec3.fromValues(this.centerPosition[0] + amount * delta, this.centerPosition[1], 0);
             if (!this.CheckCollisionWithCollider(nextCenterPosition)) {
                 this.centerPosition = nextCenterPosition;
             }
@@ -1300,8 +1209,8 @@ define("Projectiles/Fireball", ["require", "exports", "gl-matrix", "BoundingBox"
         }
         // TODO: yet another duplication
         CheckCollisionWithCollider(nextPosition) {
-            const topleft = gl_matrix_8.vec3.sub(gl_matrix_8.vec3.create(), nextPosition, gl_matrix_8.vec3.fromValues(this.bbSize[0] / 2, this.bbSize[1] / 2, 0));
-            const bbPos = gl_matrix_8.vec3.add(gl_matrix_8.vec3.create(), topleft, this.bbOffset);
+            const topleft = gl_matrix_7.vec3.sub(gl_matrix_7.vec3.create(), nextPosition, gl_matrix_7.vec3.fromValues(this.bbSize[0] / 2, this.bbSize[1] / 2, 0));
+            const bbPos = gl_matrix_7.vec3.add(gl_matrix_7.vec3.create(), topleft, this.bbOffset);
             const nextBoundingBox = new BoundingBox_2.BoundingBox(bbPos, this.bbSize);
             const colliding = this.collider.IsCollidingWith(nextBoundingBox, false);
             return colliding;
@@ -1322,7 +1231,7 @@ define("Projectiles/Fireball", ["require", "exports", "gl-matrix", "BoundingBox"
     }
     exports.Fireball = Fireball;
 });
-define("Projectiles/BiteProjectile", ["require", "exports", "gl-matrix", "BoundingBox", "Shader", "Sprite", "SpriteBatch", "TexturePool", "Utils", "SoundEffectPool"], function (require, exports, gl_matrix_9, BoundingBox_3, Shader_5, Sprite_7, SpriteBatch_5, TexturePool_4, Utils_5, SoundEffectPool_3) {
+define("Projectiles/BiteProjectile", ["require", "exports", "gl-matrix", "BoundingBox", "Shader", "Sprite", "SpriteBatch", "TexturePool", "Utils", "SoundEffectPool"], function (require, exports, gl_matrix_8, BoundingBox_3, Shader_4, Sprite_6, SpriteBatch_4, TexturePool_3, Utils_4, SoundEffectPool_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.BiteProjectile = void 0;
@@ -1343,18 +1252,18 @@ define("Projectiles/BiteProjectile", ["require", "exports", "gl-matrix", "Boundi
             this.currentAnimationFrame = 0;
             // TODO: flip texure, to achive left and right facing bite attack
             this.currentFrameSet = [
-                gl_matrix_9.vec2.fromValues(0 / 5, 0 / 2),
-                gl_matrix_9.vec2.fromValues(1 / 5, 0 / 2),
-                gl_matrix_9.vec2.fromValues(0 / 5, 1 / 2),
-                gl_matrix_9.vec2.fromValues(1 / 5, 1 / 2),
+                gl_matrix_8.vec2.fromValues(0 / 5, 0 / 2),
+                gl_matrix_8.vec2.fromValues(1 / 5, 0 / 2),
+                gl_matrix_8.vec2.fromValues(0 / 5, 1 / 2),
+                gl_matrix_8.vec2.fromValues(1 / 5, 1 / 2),
             ];
-            this.bbOffset = gl_matrix_9.vec3.fromValues(0, 0, 0);
-            this.bbSize = gl_matrix_9.vec2.fromValues(1.6, 1.6);
-            this.spriteVisualScale = gl_matrix_9.vec3.fromValues(5, 5, 0);
-            this.sprite = new Sprite_7.Sprite(Utils_5.Utils.DefaultSpriteVertices, Utils_5.Utils.CreateTextureCoordinates(0 / 5, 0 / 2, 1 / 5, 1 / 2));
-            this.batch = new SpriteBatch_5.SpriteBatch(this.shader, [this.sprite], this.texture);
-            this.bbSprite = new Sprite_7.Sprite(Utils_5.Utils.DefaultSpriteVertices, Utils_5.Utils.DefaultSpriteTextureCoordinates);
-            this.bbBatch = new SpriteBatch_5.SpriteBatch(this.bbShader, [this.bbSprite], null);
+            this.bbOffset = gl_matrix_8.vec3.fromValues(0, 0, 0);
+            this.bbSize = gl_matrix_8.vec2.fromValues(1.6, 1.6);
+            this.spriteVisualScale = gl_matrix_8.vec3.fromValues(5, 5, 0);
+            this.sprite = new Sprite_6.Sprite(Utils_4.Utils.DefaultSpriteVertices, Utils_4.Utils.CreateTextureCoordinates(0 / 5, 0 / 2, 1 / 5, 1 / 2));
+            this.batch = new SpriteBatch_4.SpriteBatch(this.shader, [this.sprite], this.texture);
+            this.bbSprite = new Sprite_6.Sprite(Utils_4.Utils.DefaultSpriteVertices, Utils_4.Utils.DefaultSpriteTextureCoordinates);
+            this.bbBatch = new SpriteBatch_4.SpriteBatch(this.bbShader, [this.bbSprite], null);
             this.OnHitListeners = [];
             this.sprite.textureOffset = this.currentFrameSet[0];
             // this.shader.SetVec4Uniform('colorOverlay', vec4.fromValues(0, 0, 0, 1));
@@ -1364,10 +1273,10 @@ define("Projectiles/BiteProjectile", ["require", "exports", "gl-matrix", "Boundi
             // no-op
         }
         static async Create(centerPosition, facingDirection) {
-            const shader = await Shader_5.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
-            const bbShader = await Shader_5.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
+            const shader = await Shader_4.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
+            const bbShader = await Shader_4.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
             const biteDamageSound = await SoundEffectPool_3.SoundEffectPool.GetInstance().GetAudio('audio/bite.wav');
-            const texture = await TexturePool_4.TexturePool.GetInstance().GetTexture('textures/fang.png');
+            const texture = await TexturePool_3.TexturePool.GetInstance().GetTexture('textures/fang.png');
             return new BiteProjectile(centerPosition, facingDirection, shader, bbShader, biteDamageSound, texture);
         }
         get EndCondition() {
@@ -1381,12 +1290,12 @@ define("Projectiles/BiteProjectile", ["require", "exports", "gl-matrix", "Boundi
             this.alreadyHit = true;
         }
         get BoundingBox() {
-            const topLeftCorner = gl_matrix_9.vec3.sub(gl_matrix_9.vec3.create(), this.centerPosition, gl_matrix_9.vec3.fromValues(this.bbSize[0] / 2, this.bbSize[1] / 2, 0));
-            const bbPos = gl_matrix_9.vec3.add(gl_matrix_9.vec3.create(), topLeftCorner, this.bbOffset); // Adjust bb position with the offset
+            const topLeftCorner = gl_matrix_8.vec3.sub(gl_matrix_8.vec3.create(), this.centerPosition, gl_matrix_8.vec3.fromValues(this.bbSize[0] / 2, this.bbSize[1] / 2, 0));
+            const bbPos = gl_matrix_8.vec3.add(gl_matrix_8.vec3.create(), topLeftCorner, this.bbOffset); // Adjust bb position with the offset
             return new BoundingBox_3.BoundingBox(bbPos, this.bbSize);
         }
         get PushbackForce() {
-            const damagePushback = gl_matrix_9.vec3.scale(gl_matrix_9.vec3.create(), this.facingDirection, -0.01);
+            const damagePushback = gl_matrix_8.vec3.scale(gl_matrix_8.vec3.create(), this.facingDirection, -0.01);
             damagePushback[1] -= 0.01;
             return damagePushback;
         }
@@ -1395,14 +1304,14 @@ define("Projectiles/BiteProjectile", ["require", "exports", "gl-matrix", "Boundi
         }
         Draw(proj, view) {
             if (!this.animationFinished) {
-                const topLeftCorner = gl_matrix_9.vec3.sub(gl_matrix_9.vec3.create(), this.centerPosition, gl_matrix_9.vec3.fromValues(this.spriteVisualScale[0] / 2, this.spriteVisualScale[1] / 2, 0));
-                gl_matrix_9.mat4.translate(this.batch.ModelMatrix, gl_matrix_9.mat4.create(), topLeftCorner);
-                gl_matrix_9.mat4.scale(this.batch.ModelMatrix, this.batch.ModelMatrix, this.spriteVisualScale);
+                const topLeftCorner = gl_matrix_8.vec3.sub(gl_matrix_8.vec3.create(), this.centerPosition, gl_matrix_8.vec3.fromValues(this.spriteVisualScale[0] / 2, this.spriteVisualScale[1] / 2, 0));
+                gl_matrix_8.mat4.translate(this.batch.ModelMatrix, gl_matrix_8.mat4.create(), topLeftCorner);
+                gl_matrix_8.mat4.scale(this.batch.ModelMatrix, this.batch.ModelMatrix, this.spriteVisualScale);
                 this.batch.Draw(proj, view);
             }
             // Draw bb
-            gl_matrix_9.mat4.translate(this.bbBatch.ModelMatrix, gl_matrix_9.mat4.create(), this.BoundingBox.position);
-            gl_matrix_9.mat4.scale(this.bbBatch.ModelMatrix, this.bbBatch.ModelMatrix, gl_matrix_9.vec3.fromValues(this.BoundingBox.size[0], this.BoundingBox.size[1], 1));
+            gl_matrix_8.mat4.translate(this.bbBatch.ModelMatrix, gl_matrix_8.mat4.create(), this.BoundingBox.position);
+            gl_matrix_8.mat4.scale(this.bbBatch.ModelMatrix, this.bbBatch.ModelMatrix, gl_matrix_8.vec3.fromValues(this.BoundingBox.size[0], this.BoundingBox.size[1], 1));
             this.bbBatch.Draw(proj, view);
         }
         async Update(delta) {
@@ -1436,7 +1345,7 @@ define("Projectiles/BiteProjectile", ["require", "exports", "gl-matrix", "Boundi
     }
     exports.BiteProjectile = BiteProjectile;
 });
-define("Enemies/DragonEnemy", ["require", "exports", "gl-matrix", "BoundingBox", "Shader", "Sprite", "SpriteBatch", "TexturePool", "Utils", "SoundEffectPool", "Projectiles/Fireball", "Projectiles/BiteProjectile"], function (require, exports, gl_matrix_10, BoundingBox_4, Shader_6, Sprite_8, SpriteBatch_6, TexturePool_5, Utils_6, SoundEffectPool_4, Fireball_1, BiteProjectile_1) {
+define("Enemies/DragonEnemy", ["require", "exports", "gl-matrix", "BoundingBox", "Shader", "Sprite", "SpriteBatch", "TexturePool", "Utils", "SoundEffectPool", "Projectiles/Fireball", "Projectiles/BiteProjectile"], function (require, exports, gl_matrix_9, BoundingBox_4, Shader_5, Sprite_7, SpriteBatch_5, TexturePool_4, Utils_5, SoundEffectPool_4, Fireball_1, BiteProjectile_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.DragonEnemy = void 0;
@@ -1476,46 +1385,46 @@ define("Enemies/DragonEnemy", ["require", "exports", "gl-matrix", "BoundingBox",
             this.timeInCharge = 0;
             this.timeSinceLastCharge = 0;
             this.timeinPreAttack = 0;
-            this.herosLastPositionWhenTheChargingStarted = gl_matrix_10.vec3.create();
+            this.herosLastPositionWhenTheChargingStarted = gl_matrix_9.vec3.create();
             // Animation related
             this.currentFrameTime = 0;
             this.currentAnimationFrame = 0;
             this.leftFacingAnimationFrames = [
-                gl_matrix_10.vec2.fromValues(3 / 12, 3 / 8),
-                gl_matrix_10.vec2.fromValues(4 / 12, 3 / 8),
-                gl_matrix_10.vec2.fromValues(5 / 12, 3 / 8),
+                gl_matrix_9.vec2.fromValues(3 / 12, 3 / 8),
+                gl_matrix_9.vec2.fromValues(4 / 12, 3 / 8),
+                gl_matrix_9.vec2.fromValues(5 / 12, 3 / 8),
             ];
             this.rightFacingAnimationFrames = [
-                gl_matrix_10.vec2.fromValues(3 / 12, 1 / 8),
-                gl_matrix_10.vec2.fromValues(4 / 12, 1 / 8),
-                gl_matrix_10.vec2.fromValues(5 / 12, 1 / 8),
+                gl_matrix_9.vec2.fromValues(3 / 12, 1 / 8),
+                gl_matrix_9.vec2.fromValues(4 / 12, 1 / 8),
+                gl_matrix_9.vec2.fromValues(5 / 12, 1 / 8),
             ];
             this.currentFrameSet = this.leftFacingAnimationFrames;
             // Rendering related
-            this.sprite = new Sprite_8.Sprite(Utils_6.Utils.DefaultSpriteVertices, Utils_6.Utils.CreateTextureCoordinates(0.0 / 12.0, 0.0 / 8.0, 1.0 / 12.0, 1.0 / 8.0));
-            this.batch = new SpriteBatch_6.SpriteBatch(this.shader, [this.sprite], this.texture);
+            this.sprite = new Sprite_7.Sprite(Utils_5.Utils.DefaultSpriteVertices, Utils_5.Utils.CreateTextureCoordinates(0.0 / 12.0, 0.0 / 8.0, 1.0 / 12.0, 1.0 / 8.0));
+            this.batch = new SpriteBatch_5.SpriteBatch(this.shader, [this.sprite], this.texture);
             // Behaviour related
             this.timeSinceLastAttack = 0;
-            this.lastFacingDirection = gl_matrix_10.vec3.fromValues(-1, 0, 0); // Facing right by default
+            this.lastFacingDirection = gl_matrix_9.vec3.fromValues(-1, 0, 0); // Facing right by default
             this.health = 3;
             this.damagedTime = 0;
             this.damaged = false;
-            this.bbSize = gl_matrix_10.vec2.fromValues(4.8, 3);
-            this.bbOffset = gl_matrix_10.vec3.fromValues(0.1, 1.5, 0);
-            this.bbSprite = new Sprite_8.Sprite(Utils_6.Utils.DefaultSpriteVertices, Utils_6.Utils.DefaultSpriteTextureCoordinates);
-            this.bbBatch = new SpriteBatch_6.SpriteBatch(this.bbShader, [this.bbSprite], null);
+            this.bbSize = gl_matrix_9.vec2.fromValues(4.8, 3);
+            this.bbOffset = gl_matrix_9.vec3.fromValues(0.1, 1.5, 0);
+            this.bbSprite = new Sprite_7.Sprite(Utils_5.Utils.DefaultSpriteVertices, Utils_5.Utils.DefaultSpriteTextureCoordinates);
+            this.bbBatch = new SpriteBatch_5.SpriteBatch(this.bbShader, [this.bbSprite], null);
             this.sprite.textureOffset = this.leftFacingAnimationFrames[0];
             // this.bbShader.SetVec4Uniform('clr', vec4.fromValues(1, 0, 0, 0.4));
         }
         static async Create(position, visualScale, collider, hero, onDeath, spawnProjectile) {
-            const shader = await Shader_6.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
-            const bbShader = await Shader_6.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
+            const shader = await Shader_5.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
+            const bbShader = await Shader_5.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
             const enemyDamageSound = await SoundEffectPool_4.SoundEffectPool.GetInstance().GetAudio('audio/enemy_damage.wav');
             const enemyDeathSound = await SoundEffectPool_4.SoundEffectPool.GetInstance().GetAudio('audio/enemy_death.wav');
             const biteAttackSound = await SoundEffectPool_4.SoundEffectPool.GetInstance().GetAudio('audio/bite2.wav');
             const rushSound = await SoundEffectPool_4.SoundEffectPool.GetInstance().GetAudio('audio/dragon_roar.mp3');
             const backingStartSound = await SoundEffectPool_4.SoundEffectPool.GetInstance().GetAudio('audio/charge_up.mp3');
-            const texture = await TexturePool_5.TexturePool.GetInstance().GetTexture('textures/Monster2.png');
+            const texture = await TexturePool_4.TexturePool.GetInstance().GetTexture('textures/Monster2.png');
             return new DragonEnemy(position, shader, bbShader, visualScale, collider, hero, onDeath, spawnProjectile, enemyDamageSound, enemyDeathSound, biteAttackSound, rushSound, backingStartSound, texture);
         }
         Visit(hero) {
@@ -1528,13 +1437,13 @@ define("Enemies/DragonEnemy", ["require", "exports", "gl-matrix", "BoundingBox",
             return this.position;
         }
         get CenterPosition() {
-            return gl_matrix_10.vec3.fromValues(this.position[0] + this.visualScale[0] / 2, this.position[1] + this.visualScale[1] / 2, 0);
+            return gl_matrix_9.vec3.fromValues(this.position[0] + this.visualScale[0] / 2, this.position[1] + this.visualScale[1] / 2, 0);
         }
         get FacingDirection() {
             return this.lastFacingDirection;
         }
         get BoundingBox() {
-            return new BoundingBox_4.BoundingBox(gl_matrix_10.vec3.add(gl_matrix_10.vec3.create(), this.position, this.bbOffset), this.bbSize);
+            return new BoundingBox_4.BoundingBox(gl_matrix_9.vec3.add(gl_matrix_9.vec3.create(), this.position, this.bbOffset), this.bbSize);
         }
         get EndCondition() {
             return false;
@@ -1546,7 +1455,7 @@ define("Enemies/DragonEnemy", ["require", "exports", "gl-matrix", "BoundingBox",
             // Dragon ignores pushback at the moment
             this.enemyDamageSound.Play();
             this.health--;
-            this.shader.SetVec4Uniform('colorOverlay', gl_matrix_10.vec4.fromValues(1, 0, 0, 0));
+            this.shader.SetVec4Uniform('colorOverlay', gl_matrix_9.vec4.fromValues(1, 0, 0, 0));
             // TODO: dragon does not have velocity at the moment
             //vec3.set(this.velocity, pushbackForce[0], pushbackForce[1], 0);
             this.damaged = true;
@@ -1564,46 +1473,46 @@ define("Enemies/DragonEnemy", ["require", "exports", "gl-matrix", "BoundingBox",
         }
         Draw(proj, view) {
             this.batch.Draw(proj, view);
-            gl_matrix_10.mat4.translate(this.batch.ModelMatrix, gl_matrix_10.mat4.create(), this.position);
-            gl_matrix_10.mat4.scale(this.batch.ModelMatrix, this.batch.ModelMatrix, gl_matrix_10.vec3.fromValues(this.visualScale[0], this.visualScale[1], 1));
+            gl_matrix_9.mat4.translate(this.batch.ModelMatrix, gl_matrix_9.mat4.create(), this.position);
+            gl_matrix_9.mat4.scale(this.batch.ModelMatrix, this.batch.ModelMatrix, gl_matrix_9.vec3.fromValues(this.visualScale[0], this.visualScale[1], 1));
             // Bounding box drawing
             this.bbBatch.Draw(proj, view);
-            gl_matrix_10.mat4.translate(this.bbBatch.ModelMatrix, gl_matrix_10.mat4.create(), this.BoundingBox.position);
-            gl_matrix_10.mat4.scale(this.bbBatch.ModelMatrix, this.bbBatch.ModelMatrix, gl_matrix_10.vec3.fromValues(this.bbSize[0], this.bbSize[1], 1));
+            gl_matrix_9.mat4.translate(this.bbBatch.ModelMatrix, gl_matrix_9.mat4.create(), this.BoundingBox.position);
+            gl_matrix_9.mat4.scale(this.bbBatch.ModelMatrix, this.bbBatch.ModelMatrix, gl_matrix_9.vec3.fromValues(this.bbSize[0], this.bbSize[1], 1));
         }
         async Update(delta) {
             this.timeSinceLastAttack += delta;
             this.timeSinceLastCharge += delta;
             // Face in the direction of the hero
-            const dir = gl_matrix_10.vec3.sub(gl_matrix_10.vec3.create(), this.CenterPosition, this.hero.CenterPosition);
+            const dir = gl_matrix_9.vec3.sub(gl_matrix_9.vec3.create(), this.CenterPosition, this.hero.CenterPosition);
             if (dir[0] < 0) {
                 this.ChangeFrameSet(this.rightFacingAnimationFrames);
-                gl_matrix_10.vec3.set(this.lastFacingDirection, -1, 0, 0);
+                gl_matrix_9.vec3.set(this.lastFacingDirection, -1, 0, 0);
             }
             else if (dir[0] > 0) {
                 this.ChangeFrameSet(this.leftFacingAnimationFrames);
-                gl_matrix_10.vec3.set(this.lastFacingDirection, 1, 0, 0);
+                gl_matrix_9.vec3.set(this.lastFacingDirection, 1, 0, 0);
             }
             this.Animate(delta);
             this.RemoveDamageOverlayAfter(delta, 1. / 60 * 1000 * 15);
             // Attack when hero is near
-            const distance = gl_matrix_10.vec3.distance(this.CenterPosition, this.hero.CenterPosition);
+            const distance = gl_matrix_9.vec3.distance(this.CenterPosition, this.hero.CenterPosition);
             if (this.state !== State.RUSH) {
                 if (this.timeSinceLastAttack > 2000) {
                     this.timeSinceLastAttack = 0;
                     // Spit fireball
                     if (distance < 30 && distance > 10) {
                         const projectileCenter = this.FacingDirection[0] > 0 ?
-                            gl_matrix_10.vec3.add(gl_matrix_10.vec3.create(), this.CenterPosition, gl_matrix_10.vec3.fromValues(-3, 1, 0)) :
-                            gl_matrix_10.vec3.add(gl_matrix_10.vec3.create(), this.CenterPosition, gl_matrix_10.vec3.fromValues(3, 1, 0));
-                        const fireball = await Fireball_1.Fireball.Create(projectileCenter, gl_matrix_10.vec3.clone(this.FacingDirection), this.collider);
+                            gl_matrix_9.vec3.add(gl_matrix_9.vec3.create(), this.CenterPosition, gl_matrix_9.vec3.fromValues(-3, 1, 0)) :
+                            gl_matrix_9.vec3.add(gl_matrix_9.vec3.create(), this.CenterPosition, gl_matrix_9.vec3.fromValues(3, 1, 0));
+                        const fireball = await Fireball_1.Fireball.Create(projectileCenter, gl_matrix_9.vec3.clone(this.FacingDirection), this.collider);
                         this.spawnProjectile(this, fireball);
                     }
                     // Bite
                     else if (distance < 5) {
                         const projectileCenter = this.FacingDirection[0] > 0 ?
-                            gl_matrix_10.vec3.add(gl_matrix_10.vec3.create(), this.CenterPosition, gl_matrix_10.vec3.fromValues(-3, 1, 0)) :
-                            gl_matrix_10.vec3.add(gl_matrix_10.vec3.create(), this.CenterPosition, gl_matrix_10.vec3.fromValues(3, 1, 0));
+                            gl_matrix_9.vec3.add(gl_matrix_9.vec3.create(), this.CenterPosition, gl_matrix_9.vec3.fromValues(-3, 1, 0)) :
+                            gl_matrix_9.vec3.add(gl_matrix_9.vec3.create(), this.CenterPosition, gl_matrix_9.vec3.fromValues(3, 1, 0));
                         const bite = await BiteProjectile_1.BiteProjectile.Create(projectileCenter, this.FacingDirection);
                         this.biteAttackSound.Play();
                         this.spawnProjectile(this, bite);
@@ -1631,7 +1540,7 @@ define("Enemies/DragonEnemy", ["require", "exports", "gl-matrix", "BoundingBox",
             if (this.damagedTime > showOverlayTime) {
                 this.damagedTime = 0;
                 this.damaged = false;
-                this.shader.SetVec4Uniform('colorOverlay', gl_matrix_10.vec4.create());
+                this.shader.SetVec4Uniform('colorOverlay', gl_matrix_9.vec4.create());
             }
         }
         MatchHeroHeight(delta) {
@@ -1639,7 +1548,7 @@ define("Enemies/DragonEnemy", ["require", "exports", "gl-matrix", "BoundingBox",
                 // Reduce shaking by only moving when the distance is larger than a limit
                 const distance = Math.abs(this.hero.CenterPosition[1] - this.CenterPosition[1]);
                 if (distance > 0.2) {
-                    const dir = gl_matrix_10.vec3.sub(gl_matrix_10.vec3.create(), this.CenterPosition, this.hero.CenterPosition);
+                    const dir = gl_matrix_9.vec3.sub(gl_matrix_9.vec3.create(), this.CenterPosition, this.hero.CenterPosition);
                     if (dir[1] > 0) {
                         this.MoveOnY(-0.0025, delta);
                     }
@@ -1651,19 +1560,19 @@ define("Enemies/DragonEnemy", ["require", "exports", "gl-matrix", "BoundingBox",
         }
         MoveOnX(amount, delta) {
             // TODO: this fails with fast movement speed
-            const nextPosition = gl_matrix_10.vec3.fromValues(this.position[0] + amount * delta, this.position[1], this.position[2]);
+            const nextPosition = gl_matrix_9.vec3.fromValues(this.position[0] + amount * delta, this.position[1], this.position[2]);
             if (!this.CheckCollisionWithCollider(nextPosition)) {
                 this.position = nextPosition;
             }
         }
         MoveOnY(amount, delta) {
-            const nextPosition = gl_matrix_10.vec3.fromValues(this.position[0], this.position[1] + amount * delta, 0);
+            const nextPosition = gl_matrix_9.vec3.fromValues(this.position[0], this.position[1] + amount * delta, 0);
             if (!this.CheckCollisionWithCollider(nextPosition)) {
                 this.position = nextPosition;
             }
         }
         CheckCollisionWithCollider(nextPosition) {
-            const nextBbPos = gl_matrix_10.vec3.add(gl_matrix_10.vec3.create(), nextPosition, this.bbOffset);
+            const nextBbPos = gl_matrix_9.vec3.add(gl_matrix_9.vec3.create(), nextPosition, this.bbOffset);
             const nextBoundingBox = new BoundingBox_4.BoundingBox(nextBbPos, this.bbSize);
             const colliding = this.collider.IsCollidingWith(nextBoundingBox, true);
             return colliding;
@@ -1696,17 +1605,17 @@ define("Enemies/DragonEnemy", ["require", "exports", "gl-matrix", "BoundingBox",
                 }
                 else if (this.rushState === RushState.BACKING) {
                     this.timeInBacking += delta;
-                    const dir = gl_matrix_10.vec3.sub(gl_matrix_10.vec3.create(), this.CenterPosition, this.hero.CenterPosition);
+                    const dir = gl_matrix_9.vec3.sub(gl_matrix_9.vec3.create(), this.CenterPosition, this.hero.CenterPosition);
                     if (dir[0] > 0) {
                         this.MoveOnX(0.0035, delta);
                     }
                     else if (dir[0] < 0) {
                         this.MoveOnX(-0.0035, delta);
                     }
-                    if (this.timeInBacking > 3000 || (gl_matrix_10.vec3.distance(this.CenterPosition, this.hero.CenterPosition) > 15 && this.timeInBacking > 1000)) {
+                    if (this.timeInBacking > 3000 || (gl_matrix_9.vec3.distance(this.CenterPosition, this.hero.CenterPosition) > 15 && this.timeInBacking > 1000)) {
                         this.timeInBacking = 0;
                         this.rushState = RushState.CHARGE;
-                        this.herosLastPositionWhenTheChargingStarted = gl_matrix_10.vec3.clone(this.hero.CenterPosition);
+                        this.herosLastPositionWhenTheChargingStarted = gl_matrix_9.vec3.clone(this.hero.CenterPosition);
                         this.rushSound.Play();
                     }
                 }
@@ -1714,7 +1623,7 @@ define("Enemies/DragonEnemy", ["require", "exports", "gl-matrix", "BoundingBox",
                     this.timeInCharge += delta;
                     this.timeSinceLastAttack = 0;
                     this.timeSinceLastCharge = 0;
-                    const dir = gl_matrix_10.vec3.sub(gl_matrix_10.vec3.create(), this.CenterPosition, this.hero.CenterPosition);
+                    const dir = gl_matrix_9.vec3.sub(gl_matrix_9.vec3.create(), this.CenterPosition, this.hero.CenterPosition);
                     if (dir[0] > 0) {
                         this.MoveOnX(-0.035, delta);
                     }
@@ -1740,9 +1649,9 @@ define("Enemies/DragonEnemy", ["require", "exports", "gl-matrix", "BoundingBox",
                     // Spawn a bite projectile
                     // This is handled differently from the normal attack, when the hero remains close
                     const projectileCenter = this.FacingDirection[0] > 0 ?
-                        gl_matrix_10.vec3.add(gl_matrix_10.vec3.create(), this.CenterPosition, gl_matrix_10.vec3.fromValues(-2.5, 1, 0)) :
-                        gl_matrix_10.vec3.add(gl_matrix_10.vec3.create(), this.CenterPosition, gl_matrix_10.vec3.fromValues(2.5, 1, 0));
-                    const bite = await BiteProjectile_1.BiteProjectile.Create(projectileCenter, gl_matrix_10.vec3.clone(this.FacingDirection));
+                        gl_matrix_9.vec3.add(gl_matrix_9.vec3.create(), this.CenterPosition, gl_matrix_9.vec3.fromValues(-2.5, 1, 0)) :
+                        gl_matrix_9.vec3.add(gl_matrix_9.vec3.create(), this.CenterPosition, gl_matrix_9.vec3.fromValues(2.5, 1, 0));
+                    const bite = await BiteProjectile_1.BiteProjectile.Create(projectileCenter, gl_matrix_9.vec3.clone(this.FacingDirection));
                     this.biteAttackSound.Play();
                     this.spawnProjectile(this, bite);
                     this.timeSinceLastAttack = 0;
@@ -1761,7 +1670,7 @@ define("Enemies/DragonEnemy", ["require", "exports", "gl-matrix", "BoundingBox",
     }
     exports.DragonEnemy = DragonEnemy;
 });
-define("Enemies/Spike", ["require", "exports", "gl-matrix", "TexturePool", "Sprite", "Utils", "SpriteBatch", "Shader", "BoundingBox"], function (require, exports, gl_matrix_11, TexturePool_6, Sprite_9, Utils_7, SpriteBatch_7, Shader_7, BoundingBox_5) {
+define("Enemies/Spike", ["require", "exports", "gl-matrix", "TexturePool", "Sprite", "Utils", "SpriteBatch", "Shader", "BoundingBox"], function (require, exports, gl_matrix_10, TexturePool_5, Sprite_8, Utils_6, SpriteBatch_6, Shader_6, BoundingBox_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Spike = void 0;
@@ -1776,30 +1685,30 @@ define("Enemies/Spike", ["require", "exports", "gl-matrix", "TexturePool", "Spri
             this.shader = shader;
             this.bbShader = bbShader;
             this.texture = texture;
-            this.sprite = new Sprite_9.Sprite(Utils_7.Utils.DefaultSpriteVertices, Utils_7.Utils.DefaultSpriteTextureCoordinates);
-            this.batch = new SpriteBatch_7.SpriteBatch(this.shader, [this.sprite], this.texture);
-            this.bbSize = gl_matrix_11.vec2.fromValues(1, 1);
-            this.bbOffset = gl_matrix_11.vec3.fromValues(0, 0, 0);
-            this.bbSprite = new Sprite_9.Sprite(Utils_7.Utils.DefaultSpriteVertices, Utils_7.Utils.DefaultSpriteTextureCoordinates);
-            this.bbBatch = new SpriteBatch_7.SpriteBatch(this.bbShader, [this.bbSprite], null);
+            this.sprite = new Sprite_8.Sprite(Utils_6.Utils.DefaultSpriteVertices, Utils_6.Utils.DefaultSpriteTextureCoordinates);
+            this.batch = new SpriteBatch_6.SpriteBatch(this.shader, [this.sprite], this.texture);
+            this.bbSize = gl_matrix_10.vec2.fromValues(1, 1);
+            this.bbOffset = gl_matrix_10.vec3.fromValues(0, 0, 0);
+            this.bbSprite = new Sprite_8.Sprite(Utils_6.Utils.DefaultSpriteVertices, Utils_6.Utils.DefaultSpriteTextureCoordinates);
+            this.bbBatch = new SpriteBatch_6.SpriteBatch(this.bbShader, [this.bbSprite], null);
             //  this.bbShader.SetVec4Uniform('clr', vec4.fromValues(1, 0, 0, 0.3));
         }
         CollideWithAttack(attack) {
             this.Damage(attack.PushbackForce); // No op at the moment. See: Damage()
         }
         static async Create(position, visualScale) {
-            const shader = await Shader_7.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
-            const bbShader = await Shader_7.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
-            const texture = await TexturePool_6.TexturePool.GetInstance().GetTexture('textures/spike.png');
+            const shader = await Shader_6.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
+            const bbShader = await Shader_6.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
+            const texture = await TexturePool_5.TexturePool.GetInstance().GetTexture('textures/spike.png');
             return new Spike(position, visualScale, shader, bbShader, texture);
         }
         Draw(proj, view) {
             this.batch.Draw(proj, view);
-            gl_matrix_11.mat4.translate(this.batch.ModelMatrix, gl_matrix_11.mat4.create(), this.position);
-            gl_matrix_11.mat4.scale(this.batch.ModelMatrix, this.batch.ModelMatrix, gl_matrix_11.vec3.fromValues(this.visualScale[0], this.visualScale[1], 1));
+            gl_matrix_10.mat4.translate(this.batch.ModelMatrix, gl_matrix_10.mat4.create(), this.position);
+            gl_matrix_10.mat4.scale(this.batch.ModelMatrix, this.batch.ModelMatrix, gl_matrix_10.vec3.fromValues(this.visualScale[0], this.visualScale[1], 1));
             this.bbBatch.Draw(proj, view);
-            gl_matrix_11.mat4.translate(this.bbBatch.ModelMatrix, gl_matrix_11.mat4.create(), this.BoundingBox.position);
-            gl_matrix_11.mat4.scale(this.bbBatch.ModelMatrix, this.bbBatch.ModelMatrix, gl_matrix_11.vec3.fromValues(this.bbSize[0], this.bbSize[1], 1));
+            gl_matrix_10.mat4.translate(this.bbBatch.ModelMatrix, gl_matrix_10.mat4.create(), this.BoundingBox.position);
+            gl_matrix_10.mat4.scale(this.bbBatch.ModelMatrix, this.bbBatch.ModelMatrix, gl_matrix_10.vec3.fromValues(this.bbSize[0], this.bbSize[1], 1));
         }
         async Update(delta) {
             // No update for spike at the moment
@@ -1811,7 +1720,7 @@ define("Enemies/Spike", ["require", "exports", "gl-matrix", "TexturePool", "Spri
             return this.position;
         }
         get BoundingBox() {
-            return new BoundingBox_5.BoundingBox(gl_matrix_11.vec3.add(gl_matrix_11.vec3.create(), this.position, this.bbOffset), this.bbSize);
+            return new BoundingBox_5.BoundingBox(gl_matrix_10.vec3.add(gl_matrix_10.vec3.create(), this.position, this.bbOffset), this.bbSize);
         }
         get EndCondition() {
             return false;
@@ -1831,7 +1740,7 @@ define("Enemies/Spike", ["require", "exports", "gl-matrix", "TexturePool", "Spri
     }
     exports.Spike = Spike;
 });
-define("Enemies/Cactus", ["require", "exports", "gl-matrix", "BoundingBox", "TexturePool", "Shader", "Sprite", "Utils", "SpriteBatch", "SoundEffectPool"], function (require, exports, gl_matrix_12, BoundingBox_6, TexturePool_7, Shader_8, Sprite_10, Utils_8, SpriteBatch_8, SoundEffectPool_5) {
+define("Enemies/Cactus", ["require", "exports", "gl-matrix", "BoundingBox", "TexturePool", "Shader", "Sprite", "Utils", "SpriteBatch", "SoundEffectPool"], function (require, exports, gl_matrix_11, BoundingBox_6, TexturePool_6, Shader_7, Sprite_9, Utils_7, SpriteBatch_7, SoundEffectPool_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Cactus = void 0;
@@ -1850,69 +1759,69 @@ define("Enemies/Cactus", ["require", "exports", "gl-matrix", "BoundingBox", "Tex
             this.health = 3;
             this.damagedTime = 0;
             this.damaged = false;
-            this.sprite = new Sprite_10.Sprite(Utils_8.Utils.DefaultSpriteVertices, Utils_8.Utils.CreateTextureCoordinates(0 / 6, 0 / 8, 1 / 6, 1 / 8));
-            this.batch = new SpriteBatch_8.SpriteBatch(this.shader, [this.sprite], this.texture);
-            this.visualScale = gl_matrix_12.vec2.fromValues(3, 3);
+            this.sprite = new Sprite_9.Sprite(Utils_7.Utils.DefaultSpriteVertices, Utils_7.Utils.CreateTextureCoordinates(0 / 6, 0 / 8, 1 / 6, 1 / 8));
+            this.batch = new SpriteBatch_7.SpriteBatch(this.shader, [this.sprite], this.texture);
+            this.visualScale = gl_matrix_11.vec2.fromValues(3, 3);
             this.currentFrameTime = 0;
             this.currentAnimationFrame = 0;
             this.currentFrameSet = [
-                gl_matrix_12.vec2.fromValues(0 / 6, 0 / 8),
-                gl_matrix_12.vec2.fromValues(1 / 6, 0 / 8),
-                gl_matrix_12.vec2.fromValues(2 / 6, 0 / 8),
-                gl_matrix_12.vec2.fromValues(3 / 6, 0 / 8),
-                gl_matrix_12.vec2.fromValues(4 / 6, 0 / 8),
-                gl_matrix_12.vec2.fromValues(5 / 6, 0 / 8),
-                gl_matrix_12.vec2.fromValues(0 / 6, 1 / 8),
-                gl_matrix_12.vec2.fromValues(1 / 6, 1 / 8),
-                gl_matrix_12.vec2.fromValues(2 / 6, 1 / 8),
-                gl_matrix_12.vec2.fromValues(3 / 6, 1 / 8),
-                gl_matrix_12.vec2.fromValues(4 / 6, 1 / 8),
-                gl_matrix_12.vec2.fromValues(5 / 6, 1 / 8),
-                gl_matrix_12.vec2.fromValues(0 / 6, 2 / 8),
-                gl_matrix_12.vec2.fromValues(1 / 6, 2 / 8),
-                gl_matrix_12.vec2.fromValues(2 / 6, 2 / 8),
-                gl_matrix_12.vec2.fromValues(3 / 6, 2 / 8),
-                gl_matrix_12.vec2.fromValues(4 / 6, 2 / 8),
-                gl_matrix_12.vec2.fromValues(5 / 6, 2 / 8),
-                gl_matrix_12.vec2.fromValues(0 / 6, 3 / 8),
-                gl_matrix_12.vec2.fromValues(1 / 6, 3 / 8),
-                gl_matrix_12.vec2.fromValues(2 / 6, 3 / 8),
-                gl_matrix_12.vec2.fromValues(3 / 6, 3 / 8),
-                gl_matrix_12.vec2.fromValues(4 / 6, 3 / 8),
-                gl_matrix_12.vec2.fromValues(5 / 6, 3 / 8),
-                gl_matrix_12.vec2.fromValues(0 / 6, 4 / 8),
-                gl_matrix_12.vec2.fromValues(1 / 6, 4 / 8),
-                gl_matrix_12.vec2.fromValues(2 / 6, 4 / 8),
-                gl_matrix_12.vec2.fromValues(3 / 6, 4 / 8),
-                gl_matrix_12.vec2.fromValues(4 / 6, 4 / 8),
-                gl_matrix_12.vec2.fromValues(5 / 6, 4 / 8),
-                gl_matrix_12.vec2.fromValues(0 / 6, 5 / 8),
-                gl_matrix_12.vec2.fromValues(1 / 6, 5 / 8),
-                gl_matrix_12.vec2.fromValues(2 / 6, 5 / 8),
-                gl_matrix_12.vec2.fromValues(3 / 6, 5 / 8),
-                gl_matrix_12.vec2.fromValues(4 / 6, 5 / 8),
-                gl_matrix_12.vec2.fromValues(5 / 6, 5 / 8),
-                gl_matrix_12.vec2.fromValues(0 / 6, 6 / 8),
-                gl_matrix_12.vec2.fromValues(1 / 6, 6 / 8),
-                gl_matrix_12.vec2.fromValues(2 / 6, 6 / 8),
-                gl_matrix_12.vec2.fromValues(3 / 6, 6 / 8),
-                gl_matrix_12.vec2.fromValues(4 / 6, 6 / 8),
-                gl_matrix_12.vec2.fromValues(5 / 6, 6 / 8),
-                gl_matrix_12.vec2.fromValues(0 / 6, 7 / 8),
-                gl_matrix_12.vec2.fromValues(1 / 6, 7 / 8),
+                gl_matrix_11.vec2.fromValues(0 / 6, 0 / 8),
+                gl_matrix_11.vec2.fromValues(1 / 6, 0 / 8),
+                gl_matrix_11.vec2.fromValues(2 / 6, 0 / 8),
+                gl_matrix_11.vec2.fromValues(3 / 6, 0 / 8),
+                gl_matrix_11.vec2.fromValues(4 / 6, 0 / 8),
+                gl_matrix_11.vec2.fromValues(5 / 6, 0 / 8),
+                gl_matrix_11.vec2.fromValues(0 / 6, 1 / 8),
+                gl_matrix_11.vec2.fromValues(1 / 6, 1 / 8),
+                gl_matrix_11.vec2.fromValues(2 / 6, 1 / 8),
+                gl_matrix_11.vec2.fromValues(3 / 6, 1 / 8),
+                gl_matrix_11.vec2.fromValues(4 / 6, 1 / 8),
+                gl_matrix_11.vec2.fromValues(5 / 6, 1 / 8),
+                gl_matrix_11.vec2.fromValues(0 / 6, 2 / 8),
+                gl_matrix_11.vec2.fromValues(1 / 6, 2 / 8),
+                gl_matrix_11.vec2.fromValues(2 / 6, 2 / 8),
+                gl_matrix_11.vec2.fromValues(3 / 6, 2 / 8),
+                gl_matrix_11.vec2.fromValues(4 / 6, 2 / 8),
+                gl_matrix_11.vec2.fromValues(5 / 6, 2 / 8),
+                gl_matrix_11.vec2.fromValues(0 / 6, 3 / 8),
+                gl_matrix_11.vec2.fromValues(1 / 6, 3 / 8),
+                gl_matrix_11.vec2.fromValues(2 / 6, 3 / 8),
+                gl_matrix_11.vec2.fromValues(3 / 6, 3 / 8),
+                gl_matrix_11.vec2.fromValues(4 / 6, 3 / 8),
+                gl_matrix_11.vec2.fromValues(5 / 6, 3 / 8),
+                gl_matrix_11.vec2.fromValues(0 / 6, 4 / 8),
+                gl_matrix_11.vec2.fromValues(1 / 6, 4 / 8),
+                gl_matrix_11.vec2.fromValues(2 / 6, 4 / 8),
+                gl_matrix_11.vec2.fromValues(3 / 6, 4 / 8),
+                gl_matrix_11.vec2.fromValues(4 / 6, 4 / 8),
+                gl_matrix_11.vec2.fromValues(5 / 6, 4 / 8),
+                gl_matrix_11.vec2.fromValues(0 / 6, 5 / 8),
+                gl_matrix_11.vec2.fromValues(1 / 6, 5 / 8),
+                gl_matrix_11.vec2.fromValues(2 / 6, 5 / 8),
+                gl_matrix_11.vec2.fromValues(3 / 6, 5 / 8),
+                gl_matrix_11.vec2.fromValues(4 / 6, 5 / 8),
+                gl_matrix_11.vec2.fromValues(5 / 6, 5 / 8),
+                gl_matrix_11.vec2.fromValues(0 / 6, 6 / 8),
+                gl_matrix_11.vec2.fromValues(1 / 6, 6 / 8),
+                gl_matrix_11.vec2.fromValues(2 / 6, 6 / 8),
+                gl_matrix_11.vec2.fromValues(3 / 6, 6 / 8),
+                gl_matrix_11.vec2.fromValues(4 / 6, 6 / 8),
+                gl_matrix_11.vec2.fromValues(5 / 6, 6 / 8),
+                gl_matrix_11.vec2.fromValues(0 / 6, 7 / 8),
+                gl_matrix_11.vec2.fromValues(1 / 6, 7 / 8),
             ];
-            this.bbOffset = gl_matrix_12.vec3.fromValues(0.35, 0.5, 0);
-            this.bbSize = gl_matrix_12.vec2.fromValues(2.3, 2.5);
-            this.bbSprite = new Sprite_10.Sprite(Utils_8.Utils.DefaultSpriteVertices, Utils_8.Utils.DefaultSpriteTextureCoordinates);
-            this.bbBatch = new SpriteBatch_8.SpriteBatch(this.bbShader, [this.bbSprite], null);
+            this.bbOffset = gl_matrix_11.vec3.fromValues(0.35, 0.5, 0);
+            this.bbSize = gl_matrix_11.vec2.fromValues(2.3, 2.5);
+            this.bbSprite = new Sprite_9.Sprite(Utils_7.Utils.DefaultSpriteVertices, Utils_7.Utils.DefaultSpriteTextureCoordinates);
+            this.bbBatch = new SpriteBatch_7.SpriteBatch(this.bbShader, [this.bbSprite], null);
             // this.bbShader.SetVec4Uniform('clr', vec4.fromValues(1, 0, 0, 0.4));
         }
         static async Create(position, onDeath) {
-            const shader = await Shader_8.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
-            const bbShader = await Shader_8.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
+            const shader = await Shader_7.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
+            const bbShader = await Shader_7.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
             const damegeSound = await SoundEffectPool_5.SoundEffectPool.GetInstance().GetAudio('audio/enemy_damage.wav');
             const deathSound = await SoundEffectPool_5.SoundEffectPool.GetInstance().GetAudio('audio/enemy_death.wav');
-            const texture = await TexturePool_7.TexturePool.GetInstance().GetTexture('textures/cactus1.png');
+            const texture = await TexturePool_6.TexturePool.GetInstance().GetTexture('textures/cactus1.png');
             return new Cactus(position, onDeath, shader, bbShader, texture, damegeSound, deathSound);
         }
         CollideWithAttack(attack) {
@@ -1920,12 +1829,12 @@ define("Enemies/Cactus", ["require", "exports", "gl-matrix", "BoundingBox", "Tex
         }
         Draw(proj, view) {
             this.batch.Draw(proj, view);
-            this.batch.ModelMatrix = gl_matrix_12.mat4.create();
-            gl_matrix_12.mat4.translate(this.batch.ModelMatrix, this.batch.ModelMatrix, this.position);
-            gl_matrix_12.mat4.scale(this.batch.ModelMatrix, this.batch.ModelMatrix, gl_matrix_12.vec3.fromValues(this.visualScale[0], this.visualScale[1], 1));
+            this.batch.ModelMatrix = gl_matrix_11.mat4.create();
+            gl_matrix_11.mat4.translate(this.batch.ModelMatrix, this.batch.ModelMatrix, this.position);
+            gl_matrix_11.mat4.scale(this.batch.ModelMatrix, this.batch.ModelMatrix, gl_matrix_11.vec3.fromValues(this.visualScale[0], this.visualScale[1], 1));
             this.bbBatch.Draw(proj, view);
-            gl_matrix_12.mat4.translate(this.bbBatch.ModelMatrix, gl_matrix_12.mat4.create(), this.BoundingBox.position);
-            gl_matrix_12.mat4.scale(this.bbBatch.ModelMatrix, this.bbBatch.ModelMatrix, gl_matrix_12.vec3.fromValues(this.bbSize[0], this.bbSize[1], 1));
+            gl_matrix_11.mat4.translate(this.bbBatch.ModelMatrix, gl_matrix_11.mat4.create(), this.BoundingBox.position);
+            gl_matrix_11.mat4.scale(this.bbBatch.ModelMatrix, this.bbBatch.ModelMatrix, gl_matrix_11.vec3.fromValues(this.bbSize[0], this.bbSize[1], 1));
         }
         async Update(delta) {
             this.Animate(delta);
@@ -1946,7 +1855,7 @@ define("Enemies/Cactus", ["require", "exports", "gl-matrix", "BoundingBox", "Tex
         Damage(pushbackForce) {
             this.enemyDamageSound.Play();
             this.health--;
-            this.shader.SetVec4Uniform('colorOverlay', gl_matrix_12.vec4.fromValues(1, 0, 0, 0));
+            this.shader.SetVec4Uniform('colorOverlay', gl_matrix_11.vec4.fromValues(1, 0, 0, 0));
             // Cacti cannot move
             // vec3.set(this.velocity, pushbackForce[0], pushbackForce[1], 0);
             this.damaged = true;
@@ -1961,7 +1870,7 @@ define("Enemies/Cactus", ["require", "exports", "gl-matrix", "BoundingBox", "Tex
             return this.position;
         }
         get BoundingBox() {
-            return new BoundingBox_6.BoundingBox(gl_matrix_12.vec3.add(gl_matrix_12.vec3.create(), this.position, this.bbOffset), this.bbSize);
+            return new BoundingBox_6.BoundingBox(gl_matrix_11.vec3.add(gl_matrix_11.vec3.create(), this.position, this.bbOffset), this.bbSize);
         }
         get EndCondition() {
             return false;
@@ -1979,7 +1888,7 @@ define("Enemies/Cactus", ["require", "exports", "gl-matrix", "BoundingBox", "Tex
             if (this.damagedTime > showOverlayTime) {
                 this.damagedTime = 0;
                 this.damaged = false;
-                this.shader.SetVec4Uniform('colorOverlay', gl_matrix_12.vec4.create());
+                this.shader.SetVec4Uniform('colorOverlay', gl_matrix_11.vec4.create());
             }
         }
         Dispose() {
@@ -1995,7 +1904,7 @@ define("Pickups/IPickup", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
 });
-define("Pickups/HealthPickup", ["require", "exports", "gl-matrix", "BoundingBox", "Shader", "TexturePool", "Sprite", "Utils", "SpriteBatch", "SoundEffectPool"], function (require, exports, gl_matrix_13, BoundingBox_7, Shader_9, TexturePool_8, Sprite_11, Utils_9, SpriteBatch_9, SoundEffectPool_6) {
+define("Pickups/HealthPickup", ["require", "exports", "gl-matrix", "BoundingBox", "Shader", "TexturePool", "Sprite", "Utils", "SpriteBatch", "SoundEffectPool"], function (require, exports, gl_matrix_12, BoundingBox_7, Shader_8, TexturePool_7, Sprite_10, Utils_8, SpriteBatch_8, SoundEffectPool_6) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.HealthPickup = void 0;
@@ -2006,30 +1915,30 @@ define("Pickups/HealthPickup", ["require", "exports", "gl-matrix", "BoundingBox"
             this.shader = shader;
             this.pickupSound = pickupSound;
             this.texture = texture;
-            this.visualScale = gl_matrix_13.vec3.fromValues(2, 2, 1);
-            this.sprite = new Sprite_11.Sprite(Utils_9.Utils.DefaultSpriteVertices, Utils_9.Utils.DefaultSpriteTextureCoordinates);
-            this.batch = new SpriteBatch_9.SpriteBatch(this.shader, [this.sprite], this.texture);
+            this.visualScale = gl_matrix_12.vec3.fromValues(2, 2, 1);
+            this.sprite = new Sprite_10.Sprite(Utils_8.Utils.DefaultSpriteVertices, Utils_8.Utils.DefaultSpriteTextureCoordinates);
+            this.batch = new SpriteBatch_8.SpriteBatch(this.shader, [this.sprite], this.texture);
             this.currentTime = 0;
-            this.startPosition = gl_matrix_13.vec3.clone(position);
+            this.startPosition = gl_matrix_12.vec3.clone(position);
         }
         static async Create(position, onPickup) {
-            const shader = await Shader_9.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
+            const shader = await Shader_8.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
             const pickupSound = await SoundEffectPool_6.SoundEffectPool.GetInstance().GetAudio('audio/item1.wav', false);
-            const texture = await TexturePool_8.TexturePool.GetInstance().GetTexture('textures/potion.png');
+            const texture = await TexturePool_7.TexturePool.GetInstance().GetTexture('textures/potion.png');
             return new HealthPickup(position, onPickup, shader, pickupSound, texture);
         }
         get EndCondition() {
             return false;
         }
         get BoundingBox() {
-            return new BoundingBox_7.BoundingBox(this.position, gl_matrix_13.vec2.fromValues(this.visualScale[0], this.visualScale[1]));
+            return new BoundingBox_7.BoundingBox(this.position, gl_matrix_12.vec2.fromValues(this.visualScale[0], this.visualScale[1]));
         }
         get Increase() {
             return 20;
         }
         Draw(proj, view) {
-            gl_matrix_13.mat4.translate(this.batch.ModelMatrix, gl_matrix_13.mat4.create(), this.position);
-            gl_matrix_13.mat4.scale(this.batch.ModelMatrix, this.batch.ModelMatrix, this.visualScale);
+            gl_matrix_12.mat4.translate(this.batch.ModelMatrix, gl_matrix_12.mat4.create(), this.position);
+            gl_matrix_12.mat4.scale(this.batch.ModelMatrix, this.batch.ModelMatrix, this.visualScale);
             this.batch.Draw(proj, view);
         }
         async Update(delta) {
@@ -2057,7 +1966,7 @@ define("Pickups/HealthPickup", ["require", "exports", "gl-matrix", "BoundingBox"
     }
     exports.HealthPickup = HealthPickup;
 });
-define("Pickups/CoinObject", ["require", "exports", "gl-matrix", "BoundingBox", "Shader", "SpriteBatch", "Utils", "TexturePool", "AnimatedSprite", "SoundEffectPool"], function (require, exports, gl_matrix_14, BoundingBox_8, Shader_10, SpriteBatch_10, Utils_10, TexturePool_9, AnimatedSprite_1, SoundEffectPool_7) {
+define("Pickups/CoinObject", ["require", "exports", "gl-matrix", "BoundingBox", "Shader", "SpriteBatch", "Utils", "TexturePool", "AnimatedSprite", "SoundEffectPool"], function (require, exports, gl_matrix_13, BoundingBox_8, Shader_9, SpriteBatch_9, Utils_9, TexturePool_8, AnimatedSprite_1, SoundEffectPool_7) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.CoinObject = void 0;
@@ -2068,18 +1977,18 @@ define("Pickups/CoinObject", ["require", "exports", "gl-matrix", "BoundingBox", 
             this.shader = shader;
             this.pickupSound = pickupSound;
             this.texture = texture;
-            this.sprite = new AnimatedSprite_1.AnimatedSprite(Utils_10.Utils.DefaultSpriteVertices, // Im translating to the position on draw, this way a position can be dynamic
-            Utils_10.Utils.CreateTextureCoordinates(0, 0, 1.0 / 10, 1.0)); // TODO: this is hardcoded for coin.png
-            this.batch = new SpriteBatch_10.SpriteBatch(shader, [this.sprite], this.texture);
+            this.sprite = new AnimatedSprite_1.AnimatedSprite(Utils_9.Utils.DefaultSpriteVertices, // Im translating to the position on draw, this way a position can be dynamic
+            Utils_9.Utils.CreateTextureCoordinates(0, 0, 1.0 / 10, 1.0)); // TODO: this is hardcoded for coin.png
+            this.batch = new SpriteBatch_9.SpriteBatch(shader, [this.sprite], this.texture);
         }
         static async Create(position, onPickup) {
-            const shader = await Shader_10.Shader.Create('shaders/VertexShader.vert', 'shaders/FragmentShader.frag');
+            const shader = await Shader_9.Shader.Create('shaders/VertexShader.vert', 'shaders/FragmentShader.frag');
             const pickupSound = await SoundEffectPool_7.SoundEffectPool.GetInstance().GetAudio('audio/collect.mp3');
-            const texture = await TexturePool_9.TexturePool.GetInstance().GetTexture('textures/coin.png');
+            const texture = await TexturePool_8.TexturePool.GetInstance().GetTexture('textures/coin.png');
             return new CoinObject(position, onPickup, shader, pickupSound, texture);
         }
         get BoundingBox() {
-            return new BoundingBox_8.BoundingBox(this.position, gl_matrix_14.vec2.fromValues(1, 1));
+            return new BoundingBox_8.BoundingBox(this.position, gl_matrix_13.vec2.fromValues(1, 1));
         }
         get EndCondition() {
             return true;
@@ -2100,7 +2009,7 @@ define("Pickups/CoinObject", ["require", "exports", "gl-matrix", "BoundingBox", 
         }
         Draw(proj, view) {
             this.batch.Draw(proj, view);
-            gl_matrix_14.mat4.translate(this.batch.ModelMatrix, gl_matrix_14.mat4.create(), this.position);
+            gl_matrix_13.mat4.translate(this.batch.ModelMatrix, gl_matrix_13.mat4.create(), this.position);
         }
         Dispose() {
             this.batch.Dispose();
@@ -2108,6 +2017,26 @@ define("Pickups/CoinObject", ["require", "exports", "gl-matrix", "BoundingBox", 
         }
     }
     exports.CoinObject = CoinObject;
+});
+define("KeyHandler", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.KeyHandler = void 0;
+    class KeyHandler {
+        constructor() {
+            this.keys = new Map();
+        }
+        SetKey(code, state) {
+            this.keys.set(code, state);
+        }
+        IsPressed(code) {
+            if (this.keys.has(code)) {
+                return this.keys.get(code);
+            }
+            return false;
+        }
+    }
+    exports.KeyHandler = KeyHandler;
 });
 define("XBoxControllerKeys", ["require", "exports"], function (require, exports) {
     "use strict";
@@ -2151,7 +2080,7 @@ define("Keys", ["require", "exports"], function (require, exports) {
     Keys.LEFT_SHIFT = 'ShiftLeft';
     Keys.ENTER = 'Enter';
 });
-define("Projectiles/MeleeAttack", ["require", "exports", "gl-matrix", "BoundingBox", "Shader", "Sprite", "SpriteBatch", "TexturePool", "Utils", "SoundEffectPool"], function (require, exports, gl_matrix_15, BoundingBox_9, Shader_11, Sprite_12, SpriteBatch_11, TexturePool_10, Utils_11, SoundEffectPool_8) {
+define("Projectiles/MeleeAttack", ["require", "exports", "gl-matrix", "BoundingBox", "Shader", "Sprite", "SpriteBatch", "TexturePool", "Utils", "SoundEffectPool"], function (require, exports, gl_matrix_14, BoundingBox_9, Shader_10, Sprite_11, SpriteBatch_10, TexturePool_9, Utils_10, SoundEffectPool_8) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.MeleeAttack = void 0;
@@ -2169,14 +2098,14 @@ define("Projectiles/MeleeAttack", ["require", "exports", "gl-matrix", "BoundingB
             // TODO: animation also could be a component
             this.currentFrameTime = 0;
             this.currentAnimationFrame = 0;
-            this.spriteVisualScale = gl_matrix_15.vec3.fromValues(4, 3, 0);
-            this.sprite = new Sprite_12.Sprite(Utils_11.Utils.DefaultSpriteVertices, Utils_11.Utils.CreateTextureCoordinates(1.0 / 5.0, 1.0 / 2.0, 1 / 5.0, 1 / 2.0));
-            this.batch = new SpriteBatch_11.SpriteBatch(this.shader, [this.sprite], this.texture);
-            this.bbSize = gl_matrix_15.vec2.fromValues(1.25, 2);
+            this.spriteVisualScale = gl_matrix_14.vec3.fromValues(4, 3, 0);
+            this.sprite = new Sprite_11.Sprite(Utils_10.Utils.DefaultSpriteVertices, Utils_10.Utils.CreateTextureCoordinates(1.0 / 5.0, 1.0 / 2.0, 1 / 5.0, 1 / 2.0));
+            this.batch = new SpriteBatch_10.SpriteBatch(this.shader, [this.sprite], this.texture);
+            this.bbSize = gl_matrix_14.vec2.fromValues(1.25, 2);
             // Center the bb inside the attack sprite based on it's size
-            this.bbOffset = gl_matrix_15.vec3.fromValues(this.spriteVisualScale[0] / 2 - (this.bbSize[0] / 2), this.spriteVisualScale[1] / 2 - this.bbSize[1] / 2, 0);
-            this.bbSprite = new Sprite_12.Sprite(Utils_11.Utils.DefaultSpriteVertices, Utils_11.Utils.DefaultSpriteTextureCoordinates);
-            this.bbBatch = new SpriteBatch_11.SpriteBatch(this.bbShader, [this.bbSprite], null);
+            this.bbOffset = gl_matrix_14.vec3.fromValues(this.spriteVisualScale[0] / 2 - (this.bbSize[0] / 2), this.spriteVisualScale[1] / 2 - this.bbSize[1] / 2, 0);
+            this.bbSprite = new Sprite_11.Sprite(Utils_10.Utils.DefaultSpriteVertices, Utils_10.Utils.DefaultSpriteTextureCoordinates);
+            this.bbBatch = new SpriteBatch_10.SpriteBatch(this.bbShader, [this.bbSprite], null);
             this.alreadyHit = false;
             this.animationFinished = false;
             this.OnHitListeners = [];
@@ -2188,10 +2117,10 @@ define("Projectiles/MeleeAttack", ["require", "exports", "gl-matrix", "BoundingB
         }
         static async Create(position, facingDirection, despawnProjectile) {
             // TODO: i really should rename the fragment shader from Hero.frag as everything seems to use it...
-            const shader = await Shader_11.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
-            const bbShader = await Shader_11.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
+            const shader = await Shader_10.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
+            const bbShader = await Shader_10.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
             const attackSound = await SoundEffectPool_8.SoundEffectPool.GetInstance().GetAudio('audio/sword.mp3');
-            const texture = await TexturePool_10.TexturePool.GetInstance().GetTexture('textures/Sword1.png');
+            const texture = await TexturePool_9.TexturePool.GetInstance().GetTexture('textures/Sword1.png');
             return new MeleeAttack(position, facingDirection, shader, bbShader, attackSound, texture, despawnProjectile);
         }
         IsCollidingWith(boundingBox) {
@@ -2201,10 +2130,10 @@ define("Projectiles/MeleeAttack", ["require", "exports", "gl-matrix", "BoundingB
             return false;
         }
         get BoundingBox() {
-            return new BoundingBox_9.BoundingBox(gl_matrix_15.vec3.add(gl_matrix_15.vec3.create(), this.position, this.bbOffset), this.bbSize);
+            return new BoundingBox_9.BoundingBox(gl_matrix_14.vec3.add(gl_matrix_14.vec3.create(), this.position, this.bbOffset), this.bbSize);
         }
         get PushbackForce() {
-            const pushbackForce = gl_matrix_15.vec3.fromValues(this.facingDirection[0] / 10, -0.005, 0);
+            const pushbackForce = gl_matrix_14.vec3.fromValues(this.facingDirection[0] / 10, -0.005, 0);
             return pushbackForce;
         }
         get AlreadyHit() {
@@ -2221,13 +2150,13 @@ define("Projectiles/MeleeAttack", ["require", "exports", "gl-matrix", "BoundingB
         // TODO: drawing logic for entities should be an ECS
         Draw(proj, view) {
             if (!this.animationFinished) {
-                gl_matrix_15.mat4.translate(this.batch.ModelMatrix, gl_matrix_15.mat4.create(), this.position);
-                gl_matrix_15.mat4.scale(this.batch.ModelMatrix, this.batch.ModelMatrix, this.spriteVisualScale);
+                gl_matrix_14.mat4.translate(this.batch.ModelMatrix, gl_matrix_14.mat4.create(), this.position);
+                gl_matrix_14.mat4.scale(this.batch.ModelMatrix, this.batch.ModelMatrix, this.spriteVisualScale);
                 this.batch.Draw(proj, view);
             }
             // Draw bb
-            gl_matrix_15.mat4.translate(this.bbBatch.ModelMatrix, gl_matrix_15.mat4.create(), this.BoundingBox.position);
-            gl_matrix_15.mat4.scale(this.bbBatch.ModelMatrix, this.bbBatch.ModelMatrix, gl_matrix_15.vec3.fromValues(this.BoundingBox.size[0], this.BoundingBox.size[1], 1));
+            gl_matrix_14.mat4.translate(this.bbBatch.ModelMatrix, gl_matrix_14.mat4.create(), this.BoundingBox.position);
+            gl_matrix_14.mat4.scale(this.bbBatch.ModelMatrix, this.bbBatch.ModelMatrix, gl_matrix_14.vec3.fromValues(this.BoundingBox.size[0], this.BoundingBox.size[1], 1));
             this.bbBatch.Draw(proj, view);
         }
         async Update(delta) {
@@ -2251,7 +2180,7 @@ define("Projectiles/MeleeAttack", ["require", "exports", "gl-matrix", "BoundingB
                     this.currentAnimationFrame = 1;
                 }
                 // TODO: hardcoded for sword.png. Make animation parametrizable
-                this.sprite.textureOffset = gl_matrix_15.vec2.fromValues(this.currentAnimationFrame / 5.0, 0 / 2.0);
+                this.sprite.textureOffset = gl_matrix_14.vec2.fromValues(this.currentAnimationFrame / 5.0, 0 / 2.0);
                 this.currentFrameTime = 0;
             }
         }
@@ -2264,7 +2193,7 @@ define("Projectiles/MeleeAttack", ["require", "exports", "gl-matrix", "BoundingB
     }
     exports.MeleeAttack = MeleeAttack;
 });
-define("Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "SpriteBatch", "TexturePool", "Utils", "BoundingBox", "SoundEffectPool", "XBoxControllerKeys", "Keys", "Projectiles/MeleeAttack"], function (require, exports, gl_matrix_16, Shader_12, Sprite_13, SpriteBatch_12, TexturePool_11, Utils_12, BoundingBox_10, SoundEffectPool_9, XBoxControllerKeys_1, Keys_1, MeleeAttack_1) {
+define("Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "SpriteBatch", "TexturePool", "Utils", "BoundingBox", "SoundEffectPool", "XBoxControllerKeys", "Keys", "Projectiles/MeleeAttack"], function (require, exports, gl_matrix_15, Shader_11, Sprite_12, SpriteBatch_11, TexturePool_10, Utils_11, BoundingBox_10, SoundEffectPool_9, XBoxControllerKeys_1, Keys_1, MeleeAttack_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Hero = void 0;
@@ -2280,12 +2209,12 @@ define("Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "SpriteBa
     class Hero {
         get BoundingBox() {
             if (this.state !== State.STOMP) {
-                const bbPosition = gl_matrix_16.vec3.add(gl_matrix_16.vec3.create(), this.position, this.bbOffset);
+                const bbPosition = gl_matrix_15.vec3.add(gl_matrix_15.vec3.create(), this.position, this.bbOffset);
                 return new BoundingBox_10.BoundingBox(bbPosition, this.bbSize);
             }
             else {
-                const bbPosition = gl_matrix_16.vec3.add(gl_matrix_16.vec3.create(), this.position, gl_matrix_16.vec3.fromValues(0.75, 1.0, 0));
-                return new BoundingBox_10.BoundingBox(bbPosition, gl_matrix_16.vec2.fromValues(1.5, 2));
+                const bbPosition = gl_matrix_15.vec3.add(gl_matrix_15.vec3.create(), this.position, gl_matrix_15.vec3.fromValues(0.75, 1.0, 0));
+                return new BoundingBox_10.BoundingBox(bbPosition, gl_matrix_15.vec2.fromValues(1.5, 2));
             }
         }
         get CollectedCoins() {
@@ -2307,7 +2236,7 @@ define("Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "SpriteBa
             return this.position;
         }
         get CenterPosition() {
-            return gl_matrix_16.vec3.fromValues(this.position[0] + this.visualScale[0] / 2, this.position[1] + this.visualScale[1] / 2, 0);
+            return gl_matrix_15.vec3.fromValues(this.position[0] + this.visualScale[0] / 2, this.position[1] + this.visualScale[1] / 2, 0);
         }
         constructor(position, visualScale, collider, onDeath, spawnProjectile, despawnProjectile, shader, bbShader, jumpSound, landSound, walkSound, stompSound, damageSound, dieSound, texture, keyHandler, gamepadHandler) {
             this.position = position;
@@ -2332,16 +2261,16 @@ define("Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "SpriteBa
             this.state = State.IDLE;
             this.currentFrameTime = 0;
             this.currentAnimationFrame = 0;
-            this.lastPosition = gl_matrix_16.vec3.fromValues(0, 0, 1);
-            this.velocity = gl_matrix_16.vec3.fromValues(0, 0, 0);
+            this.lastPosition = gl_matrix_15.vec3.fromValues(0, 0, 1);
+            this.velocity = gl_matrix_15.vec3.fromValues(0, 0, 0);
             // BUG: Hero sometimes spawns its attack projectile in the wrong direction
             // TODO: longer range but much slower attack
             // TODO: make bb variables parametrizable
             // TODO: double jump
             // TODO: ECS system
             // TODO: state machines
-            this.bbOffset = gl_matrix_16.vec3.fromValues(1.2, 1.1, 0);
-            this.bbSize = gl_matrix_16.vec2.fromValues(0.8, 1.8);
+            this.bbOffset = gl_matrix_15.vec3.fromValues(1.2, 1.1, 0);
+            this.bbSize = gl_matrix_15.vec2.fromValues(0.8, 1.8);
             this.jumping = false;
             this.onGround = true;
             this.wasInAir = false;
@@ -2353,51 +2282,51 @@ define("Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "SpriteBa
             this.timeSinceLastMeleeAttack = 0;
             this.timeInOverHeal = 0;
             this.timeLeftInDeadState = 3000;
-            this.bbSprite = new Sprite_13.Sprite(Utils_12.Utils.DefaultSpriteVertices, Utils_12.Utils.DefaultSpriteTextureCoordinates);
-            this.bbBatch = new SpriteBatch_12.SpriteBatch(this.bbShader, [this.bbSprite], null);
-            this.lastFacingDirection = gl_matrix_16.vec3.fromValues(1, 0, 0);
-            this.sprite = new Sprite_13.Sprite(Utils_12.Utils.DefaultSpriteVertices, 
+            this.bbSprite = new Sprite_12.Sprite(Utils_11.Utils.DefaultSpriteVertices, Utils_11.Utils.DefaultSpriteTextureCoordinates);
+            this.bbBatch = new SpriteBatch_11.SpriteBatch(this.bbShader, [this.bbSprite], null);
+            this.lastFacingDirection = gl_matrix_15.vec3.fromValues(1, 0, 0);
+            this.sprite = new Sprite_12.Sprite(Utils_11.Utils.DefaultSpriteVertices, 
             // TODO: parametrize tex coords
-            Utils_12.Utils.CreateTextureCoordinates(// texture-offset is added to these coordinates, so it must be (0,0)
+            Utils_11.Utils.CreateTextureCoordinates(// texture-offset is added to these coordinates, so it must be (0,0)
             0.0 / 12.0, // These constants are hardcoded with "hero1.png" in mind
             0.0 / 8.0, 1.0 / 12.0, 1.0 / 8.0));
-            this.sprite.textureOffset = gl_matrix_16.vec2.fromValues(1 / 12.0, 1 / 8.0);
-            this.batch = new SpriteBatch_12.SpriteBatch(this.shader, [this.sprite], this.texture);
+            this.sprite.textureOffset = gl_matrix_15.vec2.fromValues(1 / 12.0, 1 / 8.0);
+            this.batch = new SpriteBatch_11.SpriteBatch(this.shader, [this.sprite], this.texture);
             // this.bbShader.SetVec4Uniform('clr', vec4.fromValues(1, 0, 0, 1));
         }
         static async Create(position, visualScale, collider, onDeath, spawnProjectile, despawnProjectile, keyHandler, gamepadHandler) {
-            const shader = await Shader_12.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
-            const bbShader = await Shader_12.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
+            const shader = await Shader_11.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
+            const bbShader = await Shader_11.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
             const jumpSound = await SoundEffectPool_9.SoundEffectPool.GetInstance().GetAudio('audio/jump.wav');
             const landSound = await SoundEffectPool_9.SoundEffectPool.GetInstance().GetAudio('audio/land.wav', false);
             const walkSound = await SoundEffectPool_9.SoundEffectPool.GetInstance().GetAudio('audio/walk1.wav', false);
             const stompSound = await SoundEffectPool_9.SoundEffectPool.GetInstance().GetAudio('audio/hero_stomp.wav', true);
             const damageSound = await SoundEffectPool_9.SoundEffectPool.GetInstance().GetAudio('audio/hero_damage.wav');
             const dieSound = await SoundEffectPool_9.SoundEffectPool.GetInstance().GetAudio('audio/hero_die.wav', false);
-            const texture = await TexturePool_11.TexturePool.GetInstance().GetTexture('textures/hero1.png');
+            const texture = await TexturePool_10.TexturePool.GetInstance().GetTexture('textures/hero1.png');
             const hero = new Hero(position, visualScale, collider, onDeath, spawnProjectile, despawnProjectile, shader, bbShader, jumpSound, landSound, walkSound, stompSound, damageSound, dieSound, texture, keyHandler, gamepadHandler);
             return hero;
         }
         Draw(proj, view) {
             this.batch.Draw(proj, view);
-            const modelMat = gl_matrix_16.mat4.create();
+            const modelMat = gl_matrix_15.mat4.create();
             if (this.state === State.DEAD) {
                 this.RotateSprite(modelMat, this.dirOnDeath);
             }
-            gl_matrix_16.mat4.translate(modelMat, modelMat, this.position);
-            gl_matrix_16.mat4.scale(modelMat, modelMat, gl_matrix_16.vec3.fromValues(this.visualScale[0], this.visualScale[1], 1));
+            gl_matrix_15.mat4.translate(modelMat, modelMat, this.position);
+            gl_matrix_15.mat4.scale(modelMat, modelMat, gl_matrix_15.vec3.fromValues(this.visualScale[0], this.visualScale[1], 1));
             this.batch.ModelMatrix = modelMat;
             // Draw bounding box
             this.bbBatch.Draw(proj, view);
-            gl_matrix_16.mat4.translate(this.bbBatch.ModelMatrix, gl_matrix_16.mat4.create(), this.BoundingBox.position);
-            gl_matrix_16.mat4.scale(this.bbBatch.ModelMatrix, this.bbBatch.ModelMatrix, gl_matrix_16.vec3.fromValues(this.BoundingBox.size[0], this.BoundingBox.size[1], 1));
+            gl_matrix_15.mat4.translate(this.bbBatch.ModelMatrix, gl_matrix_15.mat4.create(), this.BoundingBox.position);
+            gl_matrix_15.mat4.scale(this.bbBatch.ModelMatrix, this.bbBatch.ModelMatrix, gl_matrix_15.vec3.fromValues(this.BoundingBox.size[0], this.BoundingBox.size[1], 1));
         }
         RotateSprite(modelMat, directionOnDeath) {
             const centerX = this.position[0] + this.visualScale[0] * 0.5;
             const centerY = this.position[1] + this.visualScale[1] * 0.5;
-            gl_matrix_16.mat4.translate(modelMat, modelMat, gl_matrix_16.vec3.fromValues(centerX, centerY, 0));
-            gl_matrix_16.mat4.rotateZ(modelMat, modelMat, directionOnDeath[0] > 0 ? -Math.PI / 2 : Math.PI / 2);
-            gl_matrix_16.mat4.translate(modelMat, modelMat, gl_matrix_16.vec3.fromValues(-centerX, -centerY, 0));
+            gl_matrix_15.mat4.translate(modelMat, modelMat, gl_matrix_15.vec3.fromValues(centerX, centerY, 0));
+            gl_matrix_15.mat4.rotateZ(modelMat, modelMat, directionOnDeath[0] > 0 ? -Math.PI / 2 : Math.PI / 2);
+            gl_matrix_15.mat4.translate(modelMat, modelMat, gl_matrix_15.vec3.fromValues(-centerX, -centerY, 0));
         }
         Update(delta) {
             if (this.state !== State.DEAD) {
@@ -2433,11 +2362,11 @@ define("Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "SpriteBa
                     this.timeLeftInDeadState = 3000;
                 }
             }
-            const dir = gl_matrix_16.vec3.subtract(gl_matrix_16.vec3.create(), this.position, this.lastPosition);
+            const dir = gl_matrix_15.vec3.subtract(gl_matrix_15.vec3.create(), this.position, this.lastPosition);
             if (dir[0]) {
                 this.lastFacingDirection = dir;
             }
-            gl_matrix_16.vec3.copy(this.lastPosition, this.position);
+            gl_matrix_15.vec3.copy(this.lastPosition, this.position);
             this.ApplyGravityToVelocity(delta);
             this.ReduceHorizontalVelocityWhenDashing();
             this.ApplyVelocityToPosition(delta);
@@ -2469,8 +2398,8 @@ define("Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "SpriteBa
             }
             if (this.keyHandler.IsPressed(Keys_1.Keys.E) || this.gamepadHandler.IsPressed(XBoxControllerKeys_1.XBoxControllerKeys.X)) {
                 const attackPosition = this.FacingDirection[0] > 0 ?
-                    gl_matrix_16.vec3.add(gl_matrix_16.vec3.create(), this.Position, gl_matrix_16.vec3.fromValues(1.5, 0, 0)) :
-                    gl_matrix_16.vec3.add(gl_matrix_16.vec3.create(), this.Position, gl_matrix_16.vec3.fromValues(-2.5, 0, 0));
+                    gl_matrix_15.vec3.add(gl_matrix_15.vec3.create(), this.Position, gl_matrix_15.vec3.fromValues(1.5, 0, 0)) :
+                    gl_matrix_15.vec3.add(gl_matrix_15.vec3.create(), this.Position, gl_matrix_15.vec3.fromValues(-2.5, 0, 0));
                 this.Attack(async () => {
                     // TODO: creating an attack instance on every attack is wasteful.
                     this.spawnProjectile(this, await MeleeAttack_1.MeleeAttack.Create(attackPosition, this.FacingDirection, this.despawnProjectile));
@@ -2481,10 +2410,10 @@ define("Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "SpriteBa
             if (this.Health <= 0) {
                 this.state = State.DEAD;
                 this.dieSound.Play();
-                const dir = gl_matrix_16.vec3.create();
-                gl_matrix_16.vec3.subtract(dir, this.position, this.lastPosition);
+                const dir = gl_matrix_15.vec3.create();
+                gl_matrix_15.vec3.subtract(dir, this.position, this.lastPosition);
                 this.dirOnDeath = dir;
-                this.bbSize = gl_matrix_16.vec2.fromValues(this.bbSize[1], this.bbSize[0]);
+                this.bbSize = gl_matrix_15.vec2.fromValues(this.bbSize[1], this.bbSize[0]);
                 // This is only kind-of correct, but im already in dead state so who cares if the bb is not correctly aligned.
                 // The only important thing is not to fall through the geometry...
                 this.bbOffset[0] = dir[0] > 0 ? this.bbOffset[0] : 1.5 - this.bbOffset[0];
@@ -2494,15 +2423,15 @@ define("Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "SpriteBa
             if (this.invincibleTime > 1.0 / 60 * 1000 * numberOfFrames) {
                 this.invincible = false;
                 this.invincibleTime = 0;
-                this.shader.SetVec4Uniform('colorOverlay', gl_matrix_16.vec4.create());
+                this.shader.SetVec4Uniform('colorOverlay', gl_matrix_15.vec4.create());
             }
             this.invincible ? this.invincibleTime += delta : this.invincibleTime = 0;
         }
         HandleCollisionWithCollider() {
             const colliding = this.collider.IsCollidingWith(this.BoundingBox, true);
             if (colliding) {
-                gl_matrix_16.vec3.copy(this.position, this.lastPosition);
-                this.velocity = gl_matrix_16.vec3.create();
+                gl_matrix_15.vec3.copy(this.position, this.lastPosition);
+                this.velocity = gl_matrix_15.vec3.create();
                 this.onGround = true;
             }
             else {
@@ -2510,14 +2439,14 @@ define("Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "SpriteBa
             }
         }
         ApplyVelocityToPosition(delta) {
-            const moveValue = gl_matrix_16.vec3.create();
-            gl_matrix_16.vec3.scale(moveValue, this.velocity, delta);
-            gl_matrix_16.vec3.add(this.position, this.position, moveValue);
+            const moveValue = gl_matrix_15.vec3.create();
+            gl_matrix_15.vec3.scale(moveValue, this.velocity, delta);
+            gl_matrix_15.vec3.add(this.position, this.position, moveValue);
         }
         ApplyGravityToVelocity(delta) {
             if (this.state !== State.DASH) {
-                const gravity = gl_matrix_16.vec3.fromValues(0, 0.00004, 0);
-                gl_matrix_16.vec3.add(this.velocity, this.velocity, gl_matrix_16.vec3.scale(gl_matrix_16.vec3.create(), gravity, delta));
+                const gravity = gl_matrix_15.vec3.fromValues(0, 0.00004, 0);
+                gl_matrix_15.vec3.add(this.velocity, this.velocity, gl_matrix_15.vec3.scale(gl_matrix_15.vec3.create(), gravity, delta));
             }
         }
         ReduceHorizontalVelocityWhenDashing() {
@@ -2528,10 +2457,10 @@ define("Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "SpriteBa
             this.currentFrameTime += delta;
             if (this.currentFrameTime > 132) {
                 if (this.state === State.WALK) {
-                    const dir = gl_matrix_16.vec3.create();
-                    gl_matrix_16.vec3.subtract(dir, this.position, this.lastPosition);
-                    if (gl_matrix_16.vec3.squaredLength(dir) > 0) {
-                        this.sprite.textureOffset = this.calculateTextureOffset(gl_matrix_16.vec2.fromValues(dir[0], dir[1]));
+                    const dir = gl_matrix_15.vec3.create();
+                    gl_matrix_15.vec3.subtract(dir, this.position, this.lastPosition);
+                    if (gl_matrix_15.vec3.squaredLength(dir) > 0) {
+                        this.sprite.textureOffset = this.calculateTextureOffset(gl_matrix_15.vec2.fromValues(dir[0], dir[1]));
                     }
                     else {
                         // same position as last frame, so it is considered idle
@@ -2539,7 +2468,7 @@ define("Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "SpriteBa
                         // Reset back to the idle frame of the last movement direction
                         // Now it is completly dependent on the currently used texture
                         // TODO: create a texture independent configuration for animation states
-                        this.sprite.textureOffset = gl_matrix_16.vec2.fromValues(1 / 12.0, this.sprite.textureOffset[1]);
+                        this.sprite.textureOffset = gl_matrix_15.vec2.fromValues(1 / 12.0, this.sprite.textureOffset[1]);
                     }
                 }
             }
@@ -2568,23 +2497,23 @@ define("Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "SpriteBa
         MoveRight(amount, delta) {
             if (this.state !== State.DEAD && this.state !== State.STOMP && this.state !== State.DASH) {
                 this.state = State.WALK;
-                if (!this.invincible) {
-                    const nextPosition = gl_matrix_16.vec3.fromValues(this.position[0] + amount * delta, this.position[1], this.position[2]);
-                    if (!this.checkCollision(nextPosition)) {
-                        this.position = nextPosition;
-                    }
+                //if (!this.invincible) {
+                const nextPosition = gl_matrix_15.vec3.fromValues(this.position[0] + amount * delta, this.position[1], this.position[2]);
+                if (!this.checkCollision(nextPosition)) {
+                    this.position = nextPosition;
                 }
+                //}
             }
         }
         MoveLeft(amount, delta) {
             if (this.state !== State.DEAD && this.state !== State.STOMP && this.state !== State.DASH) {
                 this.state = State.WALK;
-                if (!this.invincible) {
-                    const nextPosition = gl_matrix_16.vec3.fromValues(this.position[0] - amount * delta, this.position[1], this.position[2]);
-                    if (!this.checkCollision(nextPosition)) {
-                        this.position = nextPosition;
-                    }
+                //if (!this.invincible) {
+                const nextPosition = gl_matrix_15.vec3.fromValues(this.position[0] - amount * delta, this.position[1], this.position[2]);
+                if (!this.checkCollision(nextPosition)) {
+                    this.position = nextPosition;
                 }
+                //   }
             }
         }
         Jump() {
@@ -2612,8 +2541,8 @@ define("Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "SpriteBa
                 && this.state !== State.STOMP
                 && this.dashAvailable) {
                 this.state = State.DASH;
-                const dir = gl_matrix_16.vec3.create();
-                gl_matrix_16.vec3.subtract(dir, this.position, this.lastPosition);
+                const dir = gl_matrix_15.vec3.create();
+                gl_matrix_15.vec3.subtract(dir, this.position, this.lastPosition);
                 this.velocity[0] = 0.7 * dir[0];
                 this.velocity[1] = -0.0001; // TODO: yet another little hack to make dash play nicely with collision detection
                 this.stompSound.Play();
@@ -2654,45 +2583,50 @@ define("Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "SpriteBa
                 if (!this.invincible) {
                     // Damage and pushback hero on collision.
                     this.invincible = true;
-                    this.shader.SetVec4Uniform('colorOverlay', gl_matrix_16.vec4.fromValues(1, 0, 0, 0));
+                    this.shader.SetVec4Uniform('colorOverlay', gl_matrix_15.vec4.fromValues(1, 0, 0, 0));
                     this.damageSound.Play();
                     this.Health -= 34;
-                    const dir = gl_matrix_16.vec3.subtract(gl_matrix_16.vec3.create(), this.position, enemy.Position);
-                    gl_matrix_16.vec3.normalize(dir, dir);
-                    const damagePushback = gl_matrix_16.vec3.scale(gl_matrix_16.vec3.create(), dir, 0.01);
+                    const dir = gl_matrix_15.vec3.subtract(gl_matrix_15.vec3.create(), this.position, enemy.Position);
+                    gl_matrix_15.vec3.normalize(dir, dir);
+                    const damagePushback = gl_matrix_15.vec3.scale(gl_matrix_15.vec3.create(), dir, 0.01);
                     // TODO: this is a hack to make sure that the hero is not detected as colliding with the ground, so a pushback can happen
                     damagePushback[1] -= 0.01;
-                    gl_matrix_16.vec3.set(this.velocity, damagePushback[0], damagePushback[1], 0);
+                    gl_matrix_15.vec3.set(this.velocity, damagePushback[0], damagePushback[1], 0);
                 }
             }
             else if (this.state === State.STOMP) {
-                gl_matrix_16.vec3.set(this.velocity, 0, -0.025, 0);
+                gl_matrix_15.vec3.set(this.velocity, 0, -0.025, 0);
                 this.state = State.JUMP;
                 this.jumping = true;
-                enemy.Damage(gl_matrix_16.vec3.create()); // Damage the enemy without pushing it to any direction
+                enemy.Damage(gl_matrix_15.vec3.create()); // Damage the enemy without pushing it to any direction
             }
         }
         CollideWithSpike(enemy) {
-            const pushback = gl_matrix_16.vec3.fromValues(0, -0.018, 0);
+            const pushback = gl_matrix_15.vec3.fromValues(0, -0.018, 0);
             if (!this.invincible) {
                 this.Damage(pushback);
             }
         }
         CollideWithCactus(enemy) {
             if (this.state !== State.STOMP) {
-                const dir = gl_matrix_16.vec3.subtract(gl_matrix_16.vec3.create(), this.position, enemy.Position);
-                gl_matrix_16.vec3.normalize(dir, dir);
-                const pushback = gl_matrix_16.vec3.scale(gl_matrix_16.vec3.create(), dir, 0.01);
+                const dir = gl_matrix_15.vec3.subtract(gl_matrix_15.vec3.create(), this.position, enemy.Position);
+                gl_matrix_15.vec3.normalize(dir, dir);
+                const pushback = gl_matrix_15.vec3.scale(gl_matrix_15.vec3.create(), dir, 0.01);
                 pushback[1] -= 0.01;
                 if (!this.invincible) {
                     this.Damage(pushback);
                 }
             }
             else {
-                const pushback = gl_matrix_16.vec3.fromValues(0, -0.025, 0);
+                const pushback = gl_matrix_15.vec3.fromValues(0, -0.025, 0);
                 this.Damage(pushback);
                 this.state = State.JUMP;
                 this.jumping = true;
+            }
+        }
+        DamageWithInvincibilityConsidered(pushbackForce) {
+            if (!this.invincible) {
+                this.Damage(pushbackForce);
             }
         }
         Damage(pushbackForce) {
@@ -2700,10 +2634,10 @@ define("Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "SpriteBa
             // Damage method should not consider the invincible flag because I dont want to cancel damage with projectiles when stomping
             if (this.state !== State.DEAD) {
                 this.invincible = true;
-                this.shader.SetVec4Uniform('colorOverlay', gl_matrix_16.vec4.fromValues(1, 0, 0, 0));
+                this.shader.SetVec4Uniform('colorOverlay', gl_matrix_15.vec4.fromValues(1, 0, 0, 0));
                 this.damageSound.Play();
-                this.Health -= 34;
-                gl_matrix_16.vec3.set(this.velocity, pushbackForce[0], pushbackForce[1], 0);
+                this.Health -= 20;
+                gl_matrix_15.vec3.set(this.velocity, pushbackForce[0], pushbackForce[1], 0);
             }
         }
         Kill() {
@@ -2712,12 +2646,12 @@ define("Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "SpriteBa
             }
         }
         checkCollision(nextPosition) {
-            const nextBoundingBox = new BoundingBox_10.BoundingBox(gl_matrix_16.vec3.add(gl_matrix_16.vec3.create(), nextPosition, this.bbOffset), this.bbSize);
+            const nextBoundingBox = new BoundingBox_10.BoundingBox(gl_matrix_15.vec3.add(gl_matrix_15.vec3.create(), nextPosition, this.bbOffset), this.bbSize);
             return this.collider.IsCollidingWith(nextBoundingBox, true);
         }
         calculateTextureOffset(direction) {
             if (direction[0] > 0) {
-                const offset = gl_matrix_16.vec2.fromValues(this.currentAnimationFrame++ / 12.0, 1.0 / 8.0);
+                const offset = gl_matrix_15.vec2.fromValues(this.currentAnimationFrame++ / 12.0, 1.0 / 8.0);
                 if (this.currentAnimationFrame === 3) {
                     this.currentAnimationFrame = 0;
                 }
@@ -2725,7 +2659,7 @@ define("Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "SpriteBa
                 return offset;
             }
             else if (direction[0] < 0) {
-                const offset = gl_matrix_16.vec2.fromValues(this.currentAnimationFrame++ / 12.0, 3.0 / 8.0);
+                const offset = gl_matrix_15.vec2.fromValues(this.currentAnimationFrame++ / 12.0, 3.0 / 8.0);
                 if (this.currentAnimationFrame === 3) {
                     this.currentAnimationFrame = 0;
                 }
@@ -2744,7 +2678,7 @@ define("Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "SpriteBa
     }
     exports.Hero = Hero;
 });
-define("LevelEnd", ["require", "exports", "Sprite", "gl-matrix", "BoundingBox", "SpriteBatch", "TexturePool", "Shader", "Utils", "SoundEffectPool"], function (require, exports, Sprite_14, gl_matrix_17, BoundingBox_11, SpriteBatch_13, TexturePool_12, Shader_13, Utils_13, SoundEffectPool_10) {
+define("LevelEnd", ["require", "exports", "Sprite", "gl-matrix", "BoundingBox", "SpriteBatch", "TexturePool", "Shader", "Utils", "SoundEffectPool"], function (require, exports, Sprite_13, gl_matrix_16, BoundingBox_11, SpriteBatch_12, TexturePool_11, Shader_12, Utils_12, SoundEffectPool_10) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.LevelEnd = void 0;
@@ -2756,10 +2690,10 @@ define("LevelEnd", ["require", "exports", "Sprite", "gl-matrix", "BoundingBox", 
             this.interactCallback = interactCallback;
             this.level = level;
             this.enabled = false;
-            this.size = gl_matrix_17.vec3.fromValues(2, 1, 0);
+            this.size = gl_matrix_16.vec3.fromValues(2, 1, 0);
             this.interacted = false;
-            this.sprite = new Sprite_14.Sprite(Utils_13.Utils.DefaultSpriteVertices, Utils_13.Utils.DefaultSpriteTextureCoordinates);
-            this.batch = new SpriteBatch_13.SpriteBatch(this.shader, [this.sprite], texture);
+            this.sprite = new Sprite_13.Sprite(Utils_12.Utils.DefaultSpriteVertices, Utils_12.Utils.DefaultSpriteTextureCoordinates);
+            this.batch = new SpriteBatch_12.SpriteBatch(this.shader, [this.sprite], texture);
             this.shader.SetFloatUniform('alpha', LevelEnd.transparentValue);
         }
         OnEndConditionsMet() {
@@ -2773,24 +2707,21 @@ define("LevelEnd", ["require", "exports", "Sprite", "gl-matrix", "BoundingBox", 
             // NO-OP
         }
         get BoundingBox() {
-            return new BoundingBox_11.BoundingBox(this.position, gl_matrix_17.vec2.fromValues(this.size[0], this.size[1]));
+            return new BoundingBox_11.BoundingBox(this.position, gl_matrix_16.vec2.fromValues(this.size[0], this.size[1]));
         }
         static async Create(position, interactCallback, level) {
-            const shader = await Shader_13.Shader.Create('shaders/VertexShader.vert', 'shaders/Transparent.frag');
+            const shader = await Shader_12.Shader.Create('shaders/VertexShader.vert', 'shaders/Transparent.frag');
             const endReachedEffect = await SoundEffectPool_10.SoundEffectPool.GetInstance().GetAudio('audio/ding.wav', false);
-            const texture = await TexturePool_12.TexturePool.GetInstance().GetTexture('textures/exit.png');
+            const texture = await TexturePool_11.TexturePool.GetInstance().GetTexture('textures/exit.png');
             return new LevelEnd(position, shader, endReachedEffect, texture, interactCallback, level);
         }
         // TODO: All these drawable objects need a common interface or a base class with all of the drawing/Update functionality
         Draw(projection, view) {
             this.batch.Draw(projection, view);
-            gl_matrix_17.mat4.translate(this.batch.ModelMatrix, gl_matrix_17.mat4.create(), this.position);
-            gl_matrix_17.mat4.scale(this.batch.ModelMatrix, this.batch.ModelMatrix, this.size);
+            gl_matrix_16.mat4.translate(this.batch.ModelMatrix, gl_matrix_16.mat4.create(), this.position);
+            gl_matrix_16.mat4.scale(this.batch.ModelMatrix, this.batch.ModelMatrix, this.size);
         }
         async Update(delta) {
-            if (this.interacted) {
-                this.interactCallback();
-            }
         }
         IsCollidingWith(boundingBox) {
             return boundingBox.IsCollidingWith(this.BoundingBox);
@@ -2799,12 +2730,12 @@ define("LevelEnd", ["require", "exports", "Sprite", "gl-matrix", "BoundingBox", 
             if (this.enabled && !this.interacted) {
                 this.level.updateDisabled = true; // pause level updates
                 this.endReachedEffect.Play(1, 1, () => {
-                    /** Wait for the soundeffect to play then restart level update loop.
-                    * This in turn will result in the calling of the @see Update() method,
-                    * which will notify the game object that the level change can occur
+                    /**
+                     * Wait for the soundeffect to play then restart level update loop.
                     */
                     this.interacted = true;
                     this.level.updateDisabled = false;
+                    this.interactCallback();
                 });
             }
         }
@@ -2816,203 +2747,175 @@ define("LevelEnd", ["require", "exports", "Sprite", "gl-matrix", "BoundingBox", 
     exports.LevelEnd = LevelEnd;
     LevelEnd.transparentValue = 0.5;
 });
-define("Level", ["require", "exports", "gl-matrix", "Background", "Layer", "Shader", "SpriteBatch", "TexturePool", "Tile", "SoundEffectPool", "Hero", "LevelEnd", "Enemies/DragonEnemy", "Enemies/SlimeEnemy", "Enemies/Spike", "Enemies/Cactus", "Pickups/CoinObject", "Pickups/HealthPickup"], function (require, exports, gl_matrix_18, Background_1, Layer_1, Shader_14, SpriteBatch_14, TexturePool_13, Tile_1, SoundEffectPool_11, Hero_1, LevelEnd_1, DragonEnemy_1, SlimeEnemy_1, Spike_1, Cactus_1, CoinObject_1, HealthPickup_1) {
+define("FontConfigPool", ["require", "exports", "Lock", "Textbox"], function (require, exports, Lock_4, Textbox_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Level = void 0;
-    // TODO: Multi layer support: other than layer[0] as the MainLayer
-    // TODO: parallax scrolling
-    class Level {
-        constructor(layers, bgShader, bgTexture, music, levelDescriptor, levelEndOpenSoundEffect, keyHandler, gamepadHandler) {
-            this.layers = layers;
-            this.music = music;
-            this.levelDescriptor = levelDescriptor;
-            this.levelEndOpenSoundEffect = levelEndOpenSoundEffect;
-            this.keyHandler = keyHandler;
-            this.gamepadHandler = gamepadHandler;
-            this.BackgroundViewMatrix = gl_matrix_18.mat4.create();
-            this.gameObjects = [];
-            this.levelEndSoundPlayed = false;
-            // Makes the game "pause" for some time when the level end was reached
-            this.updateDisabled = false;
-            this.restartEventListeners = [];
-            this.nextLevelEventListeners = [];
-            this.endConditionsMetEventListeners = [];
-            this.Background = new SpriteBatch_14.SpriteBatch(bgShader, [new Background_1.Background()], bgTexture);
+    exports.FontConfigPool = void 0;
+    class FontConfigPool {
+        constructor() {
+            this.configs = new Map();
+            this.lock = new Lock_4.Lock();
         }
-        static async Create(levelName, keyHandler, gamepadHandler) {
-            const texturePool = TexturePool_13.TexturePool.GetInstance();
-            const levelJsonString = await (await fetch(levelName)).text();
-            const levelDescriptor = JSON.parse(levelJsonString);
-            const loadedLayers = await Promise.all(levelDescriptor.layers.map(async (layer) => {
-                const loadedTiles = await Promise.all(layer.tiles.map(async (tile) => {
-                    const texure = await texturePool.GetTexture(tile.texture);
-                    return new Tile_1.Tile(tile.xPos, tile.yPos, texure);
-                }));
-                return await Layer_1.Layer.Create(loadedTiles);
-            }));
-            const bgShader = await Shader_14.Shader.Create('shaders/VertexShader.vert', 'shaders/FragmentShader.frag');
-            const bgTexture = await TexturePool_13.TexturePool.GetInstance().GetTexture(levelDescriptor.background);
-            const music = await SoundEffectPool_11.SoundEffectPool.GetInstance().GetAudio(levelDescriptor.music, false);
-            const levelEndOpenSoundEffect = await SoundEffectPool_11.SoundEffectPool.GetInstance().GetAudio('audio/bell.wav', false);
-            return new Level(loadedLayers, bgShader, bgTexture, music, levelDescriptor, levelEndOpenSoundEffect, keyHandler, gamepadHandler);
-        }
-        get Hero() {
-            return this.hero;
-        }
-        Draw(projectionMatrix, viewMatrix) {
-            var _a;
-            this.Background.Draw(projectionMatrix, this.BackgroundViewMatrix);
-            this.layers.forEach((layer) => {
-                layer.Draw(projectionMatrix, viewMatrix);
-            });
-            this.gameObjects.forEach(h => h.Draw(projectionMatrix, viewMatrix));
-            (_a = this.attack) === null || _a === void 0 ? void 0 : _a.Draw(projectionMatrix, viewMatrix);
-            this.hero.Draw(projectionMatrix, viewMatrix);
-        }
-        async Update(delta) {
-            var _a;
-            if (!this.updateDisabled) {
-                this.hero.Update(delta);
-                // Kill the hero if fallen into a pit
-                if (this.MainLayer.IsUnder(this.hero.BoundingBox)) {
-                    this.hero.Kill();
-                }
-                // Handle collisions between hero projectile(s) and game objects.
-                await ((_a = this.attack) === null || _a === void 0 ? void 0 : _a.Update(delta));
-                if (this.attack && !this.attack.AlreadyHit) {
-                    const enemiesCollidingWithProjectile = this.gameObjects.filter(e => e.IsCollidingWith(this.attack.BoundingBox, false));
-                    // Pushback force does not necessarily mean the amount of pushback. A big enemy can ignore a sword attack for example
-                    enemiesCollidingWithProjectile.forEach(e => e.CollideWithAttack(this.attack));
-                    this.attack.OnHit();
-                }
-                this.gameObjects.forEach(async (e) => {
-                    await e.Update(delta);
-                    if (e.IsCollidingWith(this.hero.BoundingBox, false)) {
-                        this.hero.CollideWithGameObject(e);
-                    }
-                    // Despawn out-of-bounds gameobjects. These will be projectiles most of the time.
-                    if (this.MainLayer.IsOutsideBoundary(e.BoundingBox)) {
-                        this.gameObjects = this.gameObjects.filter(item => item !== e);
-                        e.Dispose();
-                    }
-                });
-                this.CheckForEndCondition();
+        static GetInstance() {
+            if (!this.instance) {
+                this.instance = new FontConfigPool();
             }
+            return this.instance;
         }
-        get MainLayer() {
-            return this.layers[0]; // TODO: make this configurable by the loaded level
-        }
-        PlayMusic(volume) {
-            this.music.Play(1, volume, null, true);
-        }
-        StopMusic() {
-            this.music.Stop();
-        }
-        SetMusicVolume(volume) {
-            this.music.SetVolume(volume);
-        }
-        CheckForEndCondition() {
-            const numberOfEndConditions = this.gameObjects.filter(p => p.EndCondition).length;
-            if (numberOfEndConditions === 0 && !this.levelEndSoundPlayed) {
-                this.levelEndOpenSoundEffect.Play();
-                this.levelEndSoundPlayed = true;
-                this.endConditionsMetEventListeners.forEach(l => l.OnEndConditionsMet());
+        async GetFontConfig(fontPath) {
+            await this.lock.lock(fontPath);
+            const config = this.configs.get(fontPath);
+            if (!config) {
+                const created = await Textbox_1.FontConfig.Create(fontPath);
+                this.configs.set(fontPath, created);
+                await this.lock.release(fontPath);
+                return created;
             }
+            await this.lock.release(fontPath);
+            return config;
         }
-        async RestartLevel() {
-            this.endConditionsMetEventListeners = [];
-            this.hero.Dispose();
-            await this.InitHero();
-            this.gameObjects.forEach(o => o.Dispose());
-            this.gameObjects = [];
-            await this.InitGameObjects();
-            this.updateDisabled = false;
-            this.levelEndSoundPlayed = false;
+        async PreLoad() {
         }
-        async InitLevel() {
-            this.restartEventListeners.forEach(l => l.OnRestartEvent());
-            this.SetMusicVolume(0.4);
-            await this.InitHero();
-            await this.InitGameObjects();
-            this.updateDisabled = false;
-            this.levelEndSoundPlayed = false;
-        }
-        SubscribeToRestartEvent(listener) {
-            this.restartEventListeners.push(listener);
-        }
-        SubscribeToNextLevelEvent(listener) {
-            this.nextLevelEventListeners.push(listener);
-        }
-        SubscribeToEndConditionsMetEvent(listener) {
-            this.endConditionsMetEventListeners.push(listener);
-        }
-        async InitHero() {
-            this.hero = await Hero_1.Hero.Create(gl_matrix_18.vec3.fromValues(this.levelDescriptor.start.xPos - 0.9, this.levelDescriptor.start.yPos - 1.91, 1), // shift heroes spawn position by the height of its bounding box
-            gl_matrix_18.vec2.fromValues(3, 3), this.MainLayer, async () => await this.RestartLevel(), (sender, projectile) => this.attack = projectile, (attack) => this.DespawnAttack(attack), this.keyHandler, this.gamepadHandler);
-        }
-        async CreateGameObject(descriptor) {
-            switch (descriptor.type) {
-                case 'coin':
-                    return await CoinObject_1.CoinObject.Create(gl_matrix_18.vec3.fromValues(descriptor.xPos, descriptor.yPos, 1), (c) => this.RemoveGameObject(c));
-                case 'health':
-                    return await HealthPickup_1.HealthPickup.Create(gl_matrix_18.vec3.fromValues(descriptor.xPos, descriptor.yPos - 1, 1), (c) => this.RemoveGameObject(c));
-                case 'spike':
-                    return await Spike_1.Spike.Create(gl_matrix_18.vec3.fromValues(descriptor.xPos, descriptor.yPos, 1), gl_matrix_18.vec2.fromValues(1, 1));
-                case 'cactus':
-                    return await Cactus_1.Cactus.Create(gl_matrix_18.vec3.fromValues(descriptor.xPos, descriptor.yPos - 2, 1), (c) => this.RemoveGameObject(c));
-                case 'slime':
-                    return await SlimeEnemy_1.SlimeEnemy.Create(gl_matrix_18.vec3.fromValues(descriptor.xPos, descriptor.yPos - 1.8, 1), gl_matrix_18.vec2.fromValues(3, 3), this.MainLayer, (c) => this.RemoveGameObject(c));
-                case 'dragon':
-                    return await DragonEnemy_1.DragonEnemy.Create(gl_matrix_18.vec3.fromValues(descriptor.xPos, descriptor.yPos - 4, 1), gl_matrix_18.vec2.fromValues(5, 5), this.MainLayer, this.hero, // To track where the hero is, i want to move as much of the game logic from the update loop as possible
-                    (sender) => { this.RemoveGameObject(sender); }, // onDeath
-                    // Spawn projectile
-                    (sender, projectile) => {
-                        this.gameObjects.push(projectile);
-                        // Despawn projectile that hit
-                        // TODO: instead of accessing a public array, projectiles should have a subscribe method
-                        projectile.OnHitListeners.push(s => this.RemoveGameObject(s)); // TODO: despawning hero attack should be like this
-                    });
-                default:
-                    throw new Error('Unknown object type');
-            }
-        }
-        RemoveGameObject(toRemove) {
-            this.gameObjects = this.gameObjects.filter(e => e !== toRemove);
-            toRemove.Dispose();
-        }
-        DespawnAttack(attack) {
-            // TODO: Attack as a gameobject?
-            attack === null || attack === void 0 ? void 0 : attack.Dispose();
-            this.attack = null;
-        }
-        async InitGameObjects() {
-            const objects = await Promise.all(this.levelDescriptor.gameObjects.map(async (o) => await this.CreateGameObject(o)));
-            this.gameObjects.push(...objects);
-            const levelEnd = await LevelEnd_1.LevelEnd.Create(gl_matrix_18.vec3.fromValues(this.levelDescriptor.levelEnd.xPos - 1, this.levelDescriptor.levelEnd.yPos, 0), async () => {
-                this.nextLevelEventListeners.forEach(l => l.OnNextLevelEvent(this.levelDescriptor.nextLevel));
-            }, this);
-            this.SubscribeToEndConditionsMetEvent(levelEnd);
-            this.gameObjects.push(levelEnd);
-            // TODO: 2) change level format and jsons to support multiple levelends
-        }
-        Dispose() {
-            var _a;
-            this.layers.forEach(l => l.Dispose());
-            this.layers = [];
-            this.Background.Dispose();
-            this.Hero.Dispose();
-            (_a = this.attack) === null || _a === void 0 ? void 0 : _a.Dispose();
-            this.gameObjects.forEach(e => e.Dispose());
-            this.gameObjects = [];
-            this.restartEventListeners = [];
-            this.nextLevelEventListeners = [];
-            this.endConditionsMetEventListeners = [];
+        UnloadAll() {
+            this.configs.clear();
         }
     }
-    exports.Level = Level;
+    exports.FontConfigPool = FontConfigPool;
 });
-define("MainScreen", ["require", "exports", "gl-matrix", "Background", "SpriteBatch", "Shader", "TexturePool", "XBoxControllerKeys", "SoundEffectPool", "Keys", "Textbox"], function (require, exports, gl_matrix_19, Background_2, SpriteBatch_15, Shader_15, TexturePool_14, XBoxControllerKeys_2, SoundEffectPool_12, Keys_2, Textbox_2) {
+define("Textbox", ["require", "exports", "gl-matrix", "Shader", "TexturePool", "Utils", "Sprite", "SpriteBatch", "WebGLUtils", "FontConfigPool"], function (require, exports, gl_matrix_17, Shader_13, TexturePool_12, Utils_13, Sprite_14, SpriteBatch_13, WebGLUtils_4, FontConfigPool_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Textbox = exports.FontConfig = void 0;
+    class CharProperties {
+    }
+    class FontConfig {
+        constructor(characters) {
+            this.characters = characters;
+        }
+        static async Create(fontPath) {
+            const jsonString = await (await fetch(fontPath)).text();
+            const parsedTopLevel = JSON.parse(jsonString);
+            const topLevelEntries = Object.entries(parsedTopLevel);
+            const topLevelMap = new Map(topLevelEntries);
+            const charJson = JSON.stringify(topLevelMap.get('characters'));
+            const e = Object.entries(JSON.parse(charJson));
+            const chars = new Map(e);
+            return new FontConfig(chars);
+        }
+    }
+    exports.FontConfig = FontConfig;
+    class Character {
+        get Advance() {
+            return this._advance;
+        }
+        get Sprite() {
+            return this.sprite;
+        }
+        constructor(shader, fontMap, charConfig, position, scale) {
+            this.shader = shader;
+            this.fontMap = fontMap;
+            this.charConfig = charConfig;
+            this.position = position;
+            this.scale = scale;
+            this._advance = charConfig.advance * scale;
+            const height = charConfig.height * scale;
+            const width = charConfig.width * scale;
+            const originX = charConfig.originX * scale;
+            const originY = charConfig.originY * scale;
+            const originYOffset = height - originY;
+            const bottomY = position[1] + originYOffset;
+            const topY = bottomY - height;
+            const left = position[0] - originX;
+            const vertices = Utils_13.Utils.CreateCharacterVertices(gl_matrix_17.vec2.fromValues(left, topY), width, height);
+            const s = charConfig.x / fontMap.Width;
+            const t = charConfig.y / fontMap.Height;
+            const uvs = Utils_13.Utils.CreateTextureCoordinates(s, t, charConfig.width / fontMap.Width, charConfig.height / fontMap.Height);
+            this.sprite = new Sprite_14.Sprite(vertices, uvs);
+        }
+    }
+    class Textbox {
+        constructor(fontMap, shader, fontConfig) {
+            this.fontMap = fontMap;
+            this.shader = shader;
+            this.fontConfig = fontConfig;
+            this.text = [];
+            this.cursorX = 0;
+            this.maxCharacterHeight = 0;
+        }
+        static async Create(fontname) {
+            const shader = await Shader_13.Shader.Create('shaders/VertexShader.vert', 'shaders/Font.frag');
+            const fontMap = await TexturePool_12.TexturePool.GetInstance().GetTexture(`textures/Fonts/${fontname}/font.png`);
+            const fontConfig = await FontConfigPool_1.FontConfigPool.GetInstance().GetFontConfig(`textures/Fonts/${fontname}/font.json`);
+            return new Textbox(fontMap, shader, fontConfig)
+                .WithHue(1).WithSaturation(0).WithValue(1);
+        }
+        WithText(text, position, scale = 1.0) {
+            this.text = [];
+            this.cursorX = 0;
+            this.position = position;
+            const heights = [...this.fontConfig.characters.values()]
+                .map(c => c.height);
+            this.maxCharacterHeight = Math.max(...heights) * scale;
+            for (const character of text) {
+                const charConfig = this.fontConfig.characters.get(character);
+                const charPos = gl_matrix_17.vec2.fromValues(position[0] + this.cursorX, position[1] + this.maxCharacterHeight);
+                const renderableChar = new Character(this.shader, this.fontMap, charConfig, charPos, scale);
+                this.text.push(renderableChar);
+                this.cursorX += renderableChar.Advance;
+            }
+            return this;
+        }
+        WithHue(hue) {
+            this.shader.SetFloatUniform('hue', hue);
+            return this;
+        }
+        WithSaturation(saturation) {
+            this.shader.SetFloatUniform('saturation', saturation);
+            return this;
+        }
+        WithValue(value) {
+            this.shader.SetFloatUniform('value', value);
+            return this;
+        }
+        Draw(proj) {
+            WebGLUtils_4.gl.enable(WebGLUtils_4.gl.BLEND);
+            const sprites = this.text.map(t => t.Sprite);
+            const batch = new SpriteBatch_13.SpriteBatch(this.shader, sprites, this.fontMap); // TODO: recreating & destroying the batch in every frame seems very wasteful
+            batch.Draw(proj, gl_matrix_17.mat4.create());
+            batch.Dispose();
+            WebGLUtils_4.gl.disable(WebGLUtils_4.gl.BLEND);
+        }
+        get Width() {
+            return this.cursorX + this.position[0];
+        }
+        get Height() {
+            return this.maxCharacterHeight;
+        }
+        /**
+         * Helper function to predetermine the size of a textbox without creating and rendering one
+         * @param text The text to 'prerender'
+         * @param font The font that the text will be rendered in
+         * @returns An object containing the width and height of the rendered textbox
+         */
+        static async PrecalculateDimensions(font, text, scale) {
+            const fontConfig = await FontConfigPool_1.FontConfigPool.GetInstance().GetFontConfig(`textures/Fonts/${font}/font.json`);
+            let cursorX = 0;
+            const heights = [...fontConfig.characters.values()]
+                .map(c => c.height);
+            const maxCharacterHeight = Math.max(...heights) * scale;
+            for (const character of text) {
+                const charConfig = fontConfig.characters.get(character);
+                cursorX += charConfig.advance * scale;
+            }
+            return { width: cursorX, height: maxCharacterHeight };
+        }
+        Dispose() {
+            this.shader.Delete();
+        }
+    }
+    exports.Textbox = Textbox;
+});
+define("MainScreen", ["require", "exports", "gl-matrix", "Background", "SpriteBatch", "Shader", "TexturePool", "XBoxControllerKeys", "SoundEffectPool", "Keys", "Textbox"], function (require, exports, gl_matrix_18, Background_1, SpriteBatch_14, Shader_14, TexturePool_13, XBoxControllerKeys_2, SoundEffectPool_11, Keys_2, Textbox_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.MainScreen = void 0;
@@ -3026,20 +2929,20 @@ define("MainScreen", ["require", "exports", "gl-matrix", "Background", "SpriteBa
             this.pressStartTextbox = pressStartTextbox;
             this.startEventListeners = [];
             this.currentTime = 0;
-            this.textProjMat = gl_matrix_19.mat4.ortho(gl_matrix_19.mat4.create(), 0, width, height, 0, -1, 1);
+            this.textProjMat = gl_matrix_18.mat4.ortho(gl_matrix_18.mat4.create(), 0, width, height, 0, -1, 1);
         }
         static async Create(keyboardHandler, gamepadHandler, width, height) {
-            const background = new Background_2.Background();
-            const texture = await TexturePool_14.TexturePool.GetInstance().GetTexture('textures/title.jpeg');
-            const shader = await Shader_15.Shader.Create('shaders/VertexShader.vert', 'shaders/FragmentShader.frag');
-            const batch = new SpriteBatch_15.SpriteBatch(shader, [background], texture);
-            const sound = await SoundEffectPool_12.SoundEffectPool.GetInstance().GetAudio('audio/ui2.mp3', false);
+            const background = new Background_1.Background();
+            const texture = await TexturePool_13.TexturePool.GetInstance().GetTexture('textures/title.jpeg');
+            const shader = await Shader_14.Shader.Create('shaders/VertexShader.vert', 'shaders/FragmentShader.frag');
+            const batch = new SpriteBatch_14.SpriteBatch(shader, [background], texture);
+            const sound = await SoundEffectPool_11.SoundEffectPool.GetInstance().GetAudio('audio/ui2.mp3', false);
             const dimensions = await Textbox_2.Textbox.PrecalculateDimensions('Consolas', 'Press start or Enter to begin', 1);
-            const pressStartText = (await Textbox_2.Textbox.Create('Consolas')).WithText('Press start or Enter to begin', gl_matrix_19.vec2.fromValues(width / 2 - dimensions.width / 2, height - 120), 1);
+            const pressStartText = (await Textbox_2.Textbox.Create('Consolas')).WithText('Press start or Enter to begin', gl_matrix_18.vec2.fromValues(width / 2 - dimensions.width / 2, height - 120), 1);
             return new MainScreen(batch, shader, gamepadHandler, keyboardHandler, sound, pressStartText, width, height);
         }
         Draw(proj) {
-            this.batch.Draw(proj, gl_matrix_19.mat4.create());
+            this.batch.Draw(proj, gl_matrix_18.mat4.create());
             this.pressStartTextbox.Draw(this.textProjMat);
         }
         async Update(delta) {
@@ -3207,7 +3110,7 @@ define("PauseScreen/QuitMenuState", ["require", "exports", "Keys", "PauseScreen/
     }
     exports.QuitMenuState = QuitMenuState;
 });
-define("PauseScreen/PauseScreen", ["require", "exports", "Background", "gl-matrix", "Textbox", "SpriteBatch", "Shader", "SoundEffectPool", "PauseScreen/MainSelectionState", "PauseScreen/QuitMenuState"], function (require, exports, Background_3, gl_matrix_20, Textbox_3, SpriteBatch_16, Shader_16, SoundEffectPool_13, MainSelectionState_1, QuitMenuState_1) {
+define("PauseScreen/PauseScreen", ["require", "exports", "Background", "gl-matrix", "Textbox", "SpriteBatch", "Shader", "SoundEffectPool", "PauseScreen/MainSelectionState", "PauseScreen/QuitMenuState"], function (require, exports, Background_2, gl_matrix_19, Textbox_3, SpriteBatch_15, Shader_15, SoundEffectPool_12, MainSelectionState_1, QuitMenuState_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.PauseScreen = void 0;
@@ -3247,7 +3150,7 @@ define("PauseScreen/PauseScreen", ["require", "exports", "Background", "gl-matri
                 elapsedTimeSinceKeypress: 0,
                 keyWasReleased: false
             };
-            this.textProjMat = gl_matrix_20.mat4.ortho(gl_matrix_20.mat4.create(), 0, width, height, 0, -1, 1);
+            this.textProjMat = gl_matrix_19.mat4.ortho(gl_matrix_19.mat4.create(), 0, width, height, 0, -1, 1);
             this.selection = [resumeTextbox, quitTextbox];
             this.subSelection = [yesTextbox, noTextbox];
             this.ResetStates();
@@ -3256,31 +3159,31 @@ define("PauseScreen/PauseScreen", ["require", "exports", "Background", "gl-matri
             const pausedText = "Paused";
             const pausedTextDimensions = await Textbox_3.Textbox.PrecalculateDimensions('Consolas', pausedText, 1);
             const pausedTextBox = (await Textbox_3.Textbox.Create('Consolas'))
-                .WithText(pausedText, gl_matrix_20.vec2.fromValues(width / 2 - pausedTextDimensions.width / 2, height / 4), 1);
+                .WithText(pausedText, gl_matrix_19.vec2.fromValues(width / 2 - pausedTextDimensions.width / 2, height / 4), 1);
             const resumeText = "Resume";
             const resumeTextDimensions = await Textbox_3.Textbox.PrecalculateDimensions('Consolas', resumeText, 0.5);
             const resumeTextBox = (await Textbox_3.Textbox.Create('Consolas'))
-                .WithText(resumeText, gl_matrix_20.vec2.fromValues(width / 2 - resumeTextDimensions.width / 2, height / 4 + resumeTextDimensions.height * 3), 0.5);
+                .WithText(resumeText, gl_matrix_19.vec2.fromValues(width / 2 - resumeTextDimensions.width / 2, height / 4 + resumeTextDimensions.height * 3), 0.5);
             const quitText = "Quit";
             const quitTextDimensions = await Textbox_3.Textbox.PrecalculateDimensions('Consolas', quitText, 0.5);
-            const quitTextBox = (await Textbox_3.Textbox.Create('Consolas')).WithText(quitText, gl_matrix_20.vec2.fromValues(width / 2 - quitTextDimensions.width / 2, height / 4 + quitTextDimensions.height * 4), 0.5);
+            const quitTextBox = (await Textbox_3.Textbox.Create('Consolas')).WithText(quitText, gl_matrix_19.vec2.fromValues(width / 2 - quitTextDimensions.width / 2, height / 4 + quitTextDimensions.height * 4), 0.5);
             const areYouSureText = "Are you sure?";
             const areYouSureDimensions = await Textbox_3.Textbox.PrecalculateDimensions('Consolas', areYouSureText, 0.5);
-            const areYouSureTextBox = ((await Textbox_3.Textbox.Create('Consolas')).WithText(areYouSureText, gl_matrix_20.vec2.fromValues(width / 2 - areYouSureDimensions.width / 2, height / 4 + areYouSureDimensions.height * 5), 0.5));
+            const areYouSureTextBox = ((await Textbox_3.Textbox.Create('Consolas')).WithText(areYouSureText, gl_matrix_19.vec2.fromValues(width / 2 - areYouSureDimensions.width / 2, height / 4 + areYouSureDimensions.height * 5), 0.5));
             const yesNoDimensions = await Textbox_3.Textbox.PrecalculateDimensions('Consolas', 'Yes No', 0.5);
             const spaceDimensions = await Textbox_3.Textbox.PrecalculateDimensions('Consolas', ' ', 0.5);
-            const yesTextBox = ((await Textbox_3.Textbox.Create('Consolas')).WithText('Yes', gl_matrix_20.vec2.fromValues(width / 2 - yesNoDimensions.width / 2, height / 4 + yesNoDimensions.height * 6), 0.5));
-            const noTextBox = ((await Textbox_3.Textbox.Create('Consolas')).WithText('No', gl_matrix_20.vec2.fromValues(width / 2 + spaceDimensions.width, height / 4 + yesNoDimensions.height * 6), 0.5));
-            const menuSound = await SoundEffectPool_13.SoundEffectPool.GetInstance().GetAudio('audio/cursor1.wav');
-            const selectSound = await SoundEffectPool_13.SoundEffectPool.GetInstance().GetAudio('audio/pause.mp3');
-            const shader = await Shader_16.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
-            shader.SetVec4Uniform('clr', gl_matrix_20.vec4.fromValues(0, 0, 0, 0.8));
-            const background = new Background_3.Background();
-            const batch = new SpriteBatch_16.SpriteBatch(shader, [background], null);
+            const yesTextBox = ((await Textbox_3.Textbox.Create('Consolas')).WithText('Yes', gl_matrix_19.vec2.fromValues(width / 2 - yesNoDimensions.width / 2, height / 4 + yesNoDimensions.height * 6), 0.5));
+            const noTextBox = ((await Textbox_3.Textbox.Create('Consolas')).WithText('No', gl_matrix_19.vec2.fromValues(width / 2 + spaceDimensions.width, height / 4 + yesNoDimensions.height * 6), 0.5));
+            const menuSound = await SoundEffectPool_12.SoundEffectPool.GetInstance().GetAudio('audio/cursor1.wav');
+            const selectSound = await SoundEffectPool_12.SoundEffectPool.GetInstance().GetAudio('audio/pause.mp3');
+            const shader = await Shader_15.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
+            shader.SetVec4Uniform('clr', gl_matrix_19.vec4.fromValues(0, 0, 0, 0.8));
+            const background = new Background_2.Background();
+            const batch = new SpriteBatch_15.SpriteBatch(shader, [background], null);
             return new PauseScreen(width, height, batch, shader, pausedTextBox, resumeTextBox, quitTextBox, areYouSureTextBox, yesTextBox, noTextBox, keyHandler, gamepadHandler, menuSound, selectSound);
         }
         Draw(proj) {
-            this.batch.Draw(proj, gl_matrix_20.mat4.create());
+            this.batch.Draw(proj, gl_matrix_19.mat4.create());
             this.pausedTextbox.Draw(this.textProjMat);
             this.selection.forEach(s => s.WithSaturation(0).WithValue(0.3));
             this.selection[this.selectedIndex].WithHue(1).WithSaturation(0).WithValue(1);
@@ -3326,7 +3229,7 @@ define("PauseScreen/PauseScreen", ["require", "exports", "Background", "gl-matri
     }
     exports.PauseScreen = PauseScreen;
 });
-define("Game", ["require", "exports", "gl-matrix", "Camera", "Environment", "Level", "WebGLUtils", "Keys", "SoundEffectPool", "XBoxControllerKeys", "TexturePool", "Textbox", "MainScreen", "PauseScreen/PauseScreen"], function (require, exports, gl_matrix_21, Camera_1, Environment_4, Level_1, WebGLUtils_5, Keys_6, SoundEffectPool_14, XBoxControllerKeys_6, TexturePool_15, Textbox_4, MainScreen_1, PauseScreen_1) {
+define("Game", ["require", "exports", "gl-matrix", "Environment", "Level", "WebGLUtils", "Keys", "SoundEffectPool", "XBoxControllerKeys", "TexturePool", "Textbox", "MainScreen", "PauseScreen/PauseScreen"], function (require, exports, gl_matrix_20, Environment_4, Level_1, WebGLUtils_5, Keys_6, SoundEffectPool_13, XBoxControllerKeys_6, TexturePool_14, Textbox_4, MainScreen_1, PauseScreen_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Game = void 0;
@@ -3339,7 +3242,6 @@ define("Game", ["require", "exports", "gl-matrix", "Camera", "Environment", "Lev
         State["IN_GAME"] = "in_game";
         State["PAUSED"] = "paused";
     })(State || (State = {}));
-    // TODO: level editor
     // TODO: resource tracker: keep track of 'alive' opengl and other resurces resources the number shouldnt go up
     // TODO: ui builder framework
     // TODO: flip sprite
@@ -3357,16 +3259,15 @@ define("Game", ["require", "exports", "gl-matrix", "Camera", "Environment", "Lev
             this.mainScreen = mainScreen;
             this.pauseScreen = pauseScreen;
             this.pauseSoundEffect = pauseSoundEffect;
-            this.projectionMatrix = gl_matrix_21.mat4.create();
-            this.camera = new Camera_1.Camera(gl_matrix_21.vec3.create());
+            this.projectionMatrix = gl_matrix_20.mat4.create();
             this.state = State.START_SCREEN;
             this.level = null;
             this.keyWasReleased = true;
             this.elapsedTimeSinceStateChange = 0;
             this.Width = window.innerWidth;
             this.Height = window.innerHeight;
-            this.projectionMatrix = gl_matrix_21.mat4.ortho(this.projectionMatrix, 0, Environment_4.Environment.HorizontalTiles, Environment_4.Environment.VerticalTiles, 0, -1, 1);
-            this.textProjMat = gl_matrix_21.mat4.ortho(gl_matrix_21.mat4.create(), 0, this.Width, this.Height, 0, -1, 1);
+            this.projectionMatrix = gl_matrix_20.mat4.ortho(this.projectionMatrix, 0, Environment_4.Environment.HorizontalTiles, Environment_4.Environment.VerticalTiles, 0, -1, 1);
+            this.textProjMat = gl_matrix_20.mat4.ortho(gl_matrix_20.mat4.create(), 0, this.Width, this.Height, 0, -1, 1);
             WebGLUtils_5.gl.disable(WebGLUtils_5.gl.DEPTH_TEST); // TODO: Depth test has value when rendering layers. Shouldn't be disabled completely
             WebGLUtils_5.gl.blendFunc(WebGLUtils_5.gl.SRC_ALPHA, WebGLUtils_5.gl.ONE_MINUS_SRC_ALPHA);
             WebGLUtils_5.gl.viewport(0, 0, this.Width, this.Height);
@@ -3381,16 +3282,18 @@ define("Game", ["require", "exports", "gl-matrix", "Camera", "Environment", "Lev
             this.healthTextbox.Dispose();
             this.scoreTextbox.Dispose();
             this.pauseScreen.Dispose();
+            this.level.Dispose();
         }
         async OnNextLevelEvent(levelName) {
             this.pauseScreen.ResetStates();
+            const oldLevel = this.level;
+            oldLevel.StopMusic();
             const nextLevel = await Level_1.Level.Create(levelName, this.keyHandler, this.gamepadHandler);
             await nextLevel.InitLevel();
+            this.level = nextLevel;
+            oldLevel.Dispose();
             nextLevel.SubscribeToNextLevelEvent(this);
             nextLevel.SubscribeToRestartEvent(this);
-            const oldLevel = this.level;
-            oldLevel.Dispose();
-            this.level = nextLevel;
         }
         OnRestartEvent() {
             this.pauseScreen.ResetStates();
@@ -3400,11 +3303,11 @@ define("Game", ["require", "exports", "gl-matrix", "Camera", "Environment", "Lev
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
             WebGLUtils_5.WebGLUtils.CreateGLRenderingContext(canvas);
-            await SoundEffectPool_14.SoundEffectPool.GetInstance().Preload();
-            await TexturePool_15.TexturePool.GetInstance().Preload();
+            await SoundEffectPool_13.SoundEffectPool.GetInstance().Preload();
+            await TexturePool_14.TexturePool.GetInstance().Preload();
             const textbox = await Textbox_4.Textbox.Create('Consolas');
             const scoreTextBox = await Textbox_4.Textbox.Create('Consolas');
-            const pauseSoundEffect = await SoundEffectPool_14.SoundEffectPool.GetInstance().GetAudio('audio/pause.mp3');
+            const pauseSoundEffect = await SoundEffectPool_13.SoundEffectPool.GetInstance().GetAudio('audio/pause.mp3');
             const mainScreen = await MainScreen_1.MainScreen.Create(keyHandler, controllerHandler, canvas.width, canvas.height);
             const pauseScreen = await PauseScreen_1.PauseScreen.Create(canvas.width, canvas.height, keyHandler, controllerHandler);
             return new Game(keyHandler, controllerHandler, textbox, scoreTextBox, mainScreen, pauseScreen, pauseSoundEffect);
@@ -3418,7 +3321,6 @@ define("Game", ["require", "exports", "gl-matrix", "Camera", "Environment", "Lev
                 await this.level.InitLevel();
                 this.state = State.IN_GAME;
                 this.elapsedTimeSinceStateChange = 0;
-                this.level.PlayMusic(0.4);
             }
         }
         Quit() {
@@ -3452,7 +3354,7 @@ define("Game", ["require", "exports", "gl-matrix", "Camera", "Environment", "Lev
                 this.mainScreen.Draw(this.projectionMatrix);
             }
             else {
-                this.level.Draw(this.projectionMatrix, this.camera.ViewMatrix);
+                this.level.Draw(this.projectionMatrix);
                 const textColor = (() => {
                     if (this.level.Hero.Health < 35) {
                         return { hue: 0, saturation: 100 / 100, value: 100 / 100 };
@@ -3465,13 +3367,13 @@ define("Game", ["require", "exports", "gl-matrix", "Camera", "Environment", "Lev
                     }
                 })();
                 this.healthTextbox
-                    .WithText(`Health: ${this.level.Hero.Health}`, gl_matrix_21.vec2.fromValues(10, 0), 0.5)
+                    .WithText(`Health: ${this.level.Hero.Health}`, gl_matrix_20.vec2.fromValues(10, 0), 0.5)
                     .WithHue(textColor.hue)
                     .WithSaturation(textColor.saturation)
                     .WithValue(textColor.value)
                     .Draw(this.textProjMat);
                 this.scoreTextbox
-                    .WithText(`Coins: ${this.level.Hero.CollectedCoins}`, gl_matrix_21.vec2.fromValues(10, this.healthTextbox.Height), 0.5)
+                    .WithText(`Coins: ${this.level.Hero.CollectedCoins}`, gl_matrix_20.vec2.fromValues(10, this.healthTextbox.Height), 0.5)
                     .Draw(this.textProjMat);
                 if (this.state === State.PAUSED) {
                     // Draw the pause screen over the other rendered elements
@@ -3498,7 +3400,6 @@ define("Game", ["require", "exports", "gl-matrix", "Camera", "Environment", "Lev
                     this.elapsedTimeSinceStateChange = 0;
                     this.keyWasReleased = false;
                 }
-                this.camera.LookAtPosition(gl_matrix_21.vec3.clone(this.level.Hero.Position), this.level.MainLayer);
             }
             else if (this.state === State.PAUSED) {
                 this.level.SetMusicVolume(0.15);
@@ -3513,6 +3414,385 @@ define("Game", ["require", "exports", "gl-matrix", "Camera", "Environment", "Lev
         }
     }
     exports.Game = Game;
+});
+define("Level", ["require", "exports", "gl-matrix", "Background", "Layer", "Shader", "SpriteBatch", "TexturePool", "Tile", "SoundEffectPool", "Hero", "LevelEnd", "Enemies/DragonEnemy", "Enemies/SlimeEnemy", "Enemies/Spike", "Enemies/Cactus", "Pickups/CoinObject", "Pickups/HealthPickup", "Camera", "EscapeEvent"], function (require, exports, gl_matrix_21, Background_3, Layer_1, Shader_16, SpriteBatch_16, TexturePool_15, Tile_1, SoundEffectPool_14, Hero_1, LevelEnd_1, DragonEnemy_1, SlimeEnemy_1, Spike_1, Cactus_1, CoinObject_1, HealthPickup_1, Camera_1, EscapeEvent_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Level = void 0;
+    class Level {
+        ChangeEvent(eventName) {
+            const event = this.events.get(eventName);
+            if (event) {
+                this.activeEvent = event;
+            }
+        }
+        constructor(layers, defaultLayer, bgShader, bgTexture, music, levelDescriptor, levelEndOpenSoundEffect, keyHandler, gamepadHandler) {
+            this.layers = layers;
+            this.defaultLayer = defaultLayer;
+            this.music = music;
+            this.levelDescriptor = levelDescriptor;
+            this.levelEndOpenSoundEffect = levelEndOpenSoundEffect;
+            this.keyHandler = keyHandler;
+            this.gamepadHandler = gamepadHandler;
+            this.camera = new Camera_1.Camera(gl_matrix_21.vec3.create());
+            this.events = new Map();
+            this.BackgroundViewMatrix = gl_matrix_21.mat4.create();
+            this.gameObjects = [];
+            this.levelEndSoundPlayed = false;
+            // Makes the game "pause" for some time when the level end was reached
+            this.updateDisabled = false;
+            this.restartEventListeners = [];
+            this.nextLevelEventListeners = [];
+            this.endConditionsMetEventListeners = [];
+            this.Background = new SpriteBatch_16.SpriteBatch(bgShader, [new Background_3.Background()], bgTexture);
+        }
+        static async Create(levelName, keyHandler, gamepadHandler) {
+            levelName = levelName + '?version=' + Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+            const texturePool = TexturePool_15.TexturePool.GetInstance();
+            const levelJsonString = await (await fetch(levelName)).text();
+            const levelDescriptor = JSON.parse(levelJsonString);
+            const loadedLayers = await Promise.all(levelDescriptor.layers.map(async (layer) => {
+                const loadedTiles = await Promise.all(layer.tiles.map(async (tile) => {
+                    const texure = await texturePool.GetTexture(tile.texture);
+                    return new Tile_1.Tile(tile.xPos, tile.yPos, texure);
+                }));
+                return await Layer_1.Layer.Create(loadedTiles, layer.parallaxOffsetFactorX, layer.parallaxOffsetFactorY, layer.layerOffsetX, layer.layerOffsetY);
+            }));
+            const bgShader = await Shader_16.Shader.Create('shaders/VertexShader.vert', 'shaders/FragmentShader.frag');
+            const bgTexture = await TexturePool_15.TexturePool.GetInstance().GetTexture(levelDescriptor.background);
+            const music = await SoundEffectPool_14.SoundEffectPool.GetInstance().GetAudio(levelDescriptor.music, true);
+            const levelEndOpenSoundEffect = await SoundEffectPool_14.SoundEffectPool.GetInstance().GetAudio('audio/bell.wav', false);
+            return new Level(loadedLayers, levelDescriptor.defaultLayer, bgShader, bgTexture, music, levelDescriptor, levelEndOpenSoundEffect, keyHandler, gamepadHandler);
+        }
+        get Hero() {
+            return this.hero;
+        }
+        Draw(projectionMatrix) {
+            this.Background.Draw(projectionMatrix, this.BackgroundViewMatrix);
+            this.layers.forEach((layer, i) => {
+                var _a;
+                const cameraTranslation = gl_matrix_21.mat4.getTranslation(gl_matrix_21.vec3.create(), this.camera.ViewMatrix);
+                const layerMatrix = gl_matrix_21.mat4.clone(this.camera.ViewMatrix);
+                const xOffset = (i - this.defaultLayer) * cameraTranslation[0] * layer.ParallaxOffsetFactorX;
+                const yOffset = ((i - this.defaultLayer) * cameraTranslation[1] * layer.ParallaxOffsetFactorY) + layer.LayerOffsetY;
+                const parallaxOffset = gl_matrix_21.vec3.fromValues(xOffset, yOffset, 0);
+                gl_matrix_21.mat4.translate(layerMatrix, layerMatrix, parallaxOffset);
+                layer.Draw(projectionMatrix, layerMatrix);
+                if (i === this.defaultLayer) {
+                    this.gameObjects.forEach(h => h.Draw(projectionMatrix, this.camera.ViewMatrix));
+                    (_a = this.attack) === null || _a === void 0 ? void 0 : _a.Draw(projectionMatrix, this.camera.ViewMatrix);
+                    this.hero.Draw(projectionMatrix, this.camera.ViewMatrix);
+                }
+            });
+        }
+        async Update(delta) {
+            var _a;
+            if (!this.updateDisabled) {
+                this.hero.Update(delta);
+                // Kill the hero if fallen into a pit
+                if (this.MainLayer.IsUnder(this.hero.BoundingBox)) {
+                    this.hero.Kill();
+                }
+                // Handle collisions between hero projectile(s) and game objects.
+                await ((_a = this.attack) === null || _a === void 0 ? void 0 : _a.Update(delta));
+                if (this.attack && !this.attack.AlreadyHit) {
+                    const enemiesCollidingWithProjectile = this.gameObjects.filter(e => e.IsCollidingWith(this.attack.BoundingBox, false));
+                    // Pushback force does not necessarily mean the amount of pushback. A big enemy can ignore a sword attack for example
+                    enemiesCollidingWithProjectile.forEach(e => e.CollideWithAttack(this.attack));
+                    this.attack.OnHit();
+                }
+                this.gameObjects.forEach(async (e) => {
+                    await e.Update(delta);
+                    if (e.IsCollidingWith(this.hero.BoundingBox, false)) {
+                        this.hero.CollideWithGameObject(e);
+                    }
+                    // Despawn out-of-bounds gameobjects. These will be projectiles most of the time.
+                    if (this.MainLayer.IsOutsideBoundary(e.BoundingBox)) {
+                        this.gameObjects = this.gameObjects.filter(item => item !== e);
+                        e.Dispose();
+                    }
+                });
+                this.activeEvent.Update(delta);
+                this.CheckForEndCondition();
+            }
+        }
+        get MainLayer() {
+            return this.layers[this.defaultLayer];
+        }
+        PlayMusic(volume) {
+            this.music.Play(1, volume, null, true);
+        }
+        StopMusic() {
+            this.music.Stop();
+        }
+        SetMusicVolume(volume) {
+            this.music.SetVolume(volume);
+        }
+        CheckForEndCondition() {
+            const numberOfEndConditions = this.gameObjects.filter(p => p.EndCondition).length;
+            if (numberOfEndConditions === 0 && !this.levelEndSoundPlayed) {
+                this.levelEndOpenSoundEffect.Play();
+                this.levelEndSoundPlayed = true;
+                this.endConditionsMetEventListeners.forEach(l => l.OnEndConditionsMet());
+            }
+        }
+        async RestartLevel() {
+            // reset layer state (offset for now)
+            this.layers.forEach(layer => layer.ResetState());
+            this.endConditionsMetEventListeners = [];
+            this.hero.Dispose();
+            await this.InitHero();
+            this.gameObjects.forEach(o => o.Dispose());
+            this.gameObjects = [];
+            await this.InitGameObjects();
+            this.updateDisabled = false;
+            this.levelEndSoundPlayed = false;
+            this.events.clear();
+            await this.InitEvents();
+        }
+        async InitLevel() {
+            this.restartEventListeners.forEach(l => l.OnRestartEvent());
+            this.PlayMusic(0.4);
+            await this.InitHero();
+            // TODO: init layers -- recreate based on leveldescriptor
+            await this.InitGameObjects();
+            await this.InitEvents();
+            this.updateDisabled = false;
+            this.levelEndSoundPlayed = false;
+        }
+        SubscribeToRestartEvent(listener) {
+            this.restartEventListeners.push(listener);
+        }
+        SubscribeToNextLevelEvent(listener) {
+            this.nextLevelEventListeners.push(listener);
+        }
+        SubscribeToEndConditionsMetEvent(listener) {
+            this.endConditionsMetEventListeners.push(listener);
+        }
+        async InitHero() {
+            this.hero = await Hero_1.Hero.Create(gl_matrix_21.vec3.fromValues(this.levelDescriptor.start.xPos - 0.9, this.levelDescriptor.start.yPos - 1.91, 1), // shift heroes spawn position by the height of its bounding box
+            gl_matrix_21.vec2.fromValues(3, 3), this.MainLayer, async () => await this.RestartLevel(), (sender, projectile) => this.attack = projectile, (attack) => this.DespawnAttack(attack), this.keyHandler, this.gamepadHandler);
+        }
+        async CreateGameObject(descriptor) {
+            switch (descriptor.type) {
+                case 'coin':
+                    return await CoinObject_1.CoinObject.Create(gl_matrix_21.vec3.fromValues(descriptor.xPos, descriptor.yPos, 1), (c) => this.RemoveGameObject(c));
+                case 'health':
+                    return await HealthPickup_1.HealthPickup.Create(gl_matrix_21.vec3.fromValues(descriptor.xPos, descriptor.yPos - 1, 1), (c) => this.RemoveGameObject(c));
+                case 'spike':
+                    return await Spike_1.Spike.Create(gl_matrix_21.vec3.fromValues(descriptor.xPos, descriptor.yPos, 1), gl_matrix_21.vec2.fromValues(1, 1));
+                case 'cactus':
+                    return await Cactus_1.Cactus.Create(gl_matrix_21.vec3.fromValues(descriptor.xPos, descriptor.yPos - 2, 1), (c) => this.RemoveGameObject(c));
+                case 'slime':
+                    return await SlimeEnemy_1.SlimeEnemy.Create(gl_matrix_21.vec3.fromValues(descriptor.xPos, descriptor.yPos - 1.8, 1), gl_matrix_21.vec2.fromValues(3, 3), this.MainLayer, (c) => this.RemoveGameObject(c));
+                case 'dragon':
+                    return await DragonEnemy_1.DragonEnemy.Create(gl_matrix_21.vec3.fromValues(descriptor.xPos, descriptor.yPos - 4, 1), gl_matrix_21.vec2.fromValues(5, 5), this.MainLayer, this.hero, // To track where the hero is, i want to move as much of the game logic from the update loop as possible
+                    (sender) => { this.RemoveGameObject(sender); }, // onDeath
+                    // Spawn projectile
+                    (sender, projectile) => {
+                        this.gameObjects.push(projectile);
+                        // Despawn projectile that hit
+                        // TODO: instead of accessing a public array, projectiles should have a subscribe method
+                        projectile.OnHitListeners.push(s => this.RemoveGameObject(s)); // TODO: despawning hero attack should be like this
+                    });
+                case 'escape_trigger':
+                    return new EscapeEvent_1.LevelEventTrigger(this, gl_matrix_21.vec3.fromValues(descriptor.xPos, descriptor.yPos, 1), EscapeEvent_1.EscapeEvent.EVENT_KEY);
+                default:
+                    throw new Error('Unknown object type');
+            }
+        }
+        RemoveGameObject(toRemove) {
+            this.gameObjects = this.gameObjects.filter(e => e !== toRemove);
+            toRemove.Dispose();
+        }
+        DespawnAttack(attack) {
+            // TODO: Attack as a gameobject?
+            attack === null || attack === void 0 ? void 0 : attack.Dispose();
+            this.attack = null;
+        }
+        async InitEvents() {
+            const events = await Promise.all(this.levelDescriptor.events.map(async (e) => await this.CreateLevelEvent(e)));
+            events.forEach(e => this.events.set(e.EventKey, e));
+            const freeCamEvent = new EscapeEvent_1.FreeCameraEvent(this.camera, this.MainLayer, this.hero);
+            this.events.set(EscapeEvent_1.FreeCameraEvent.EVENT_KEY, freeCamEvent);
+            this.activeEvent = freeCamEvent;
+        }
+        async CreateLevelEvent(descriptor) {
+            switch (descriptor.type) {
+                case EscapeEvent_1.EscapeEvent.EVENT_KEY:
+                    const eventLayer = this.layers[descriptor.props['eventLayerId']];
+                    const eventLayerStopPosition = descriptor.props['eventLayerStopPosition'];
+                    const eventLayerSpeed = descriptor.props['eventLayerSpeed'];
+                    const cameraStopPosition = descriptor.props['cameraStopPosition'];
+                    const cameraSpeed = descriptor.props['cameraSpeed'];
+                    return await EscapeEvent_1.EscapeEvent.Create(this.camera, eventLayer, this.MainLayer, this.hero, eventLayerStopPosition, eventLayerSpeed, cameraStopPosition, cameraSpeed);
+                default:
+                    throw new Error('Unknown event type');
+            }
+        }
+        async InitGameObjects() {
+            const objects = await Promise.all(this.levelDescriptor.gameObjects.map(async (o) => await this.CreateGameObject(o)));
+            this.gameObjects.push(...objects);
+            const levelEnd = await LevelEnd_1.LevelEnd.Create(gl_matrix_21.vec3.fromValues(this.levelDescriptor.levelEnd.xPos - 1, this.levelDescriptor.levelEnd.yPos, 0), () => this.nextLevelEventListeners.forEach(async (l) => await l.OnNextLevelEvent(this.levelDescriptor.nextLevel)), this);
+            this.SubscribeToEndConditionsMetEvent(levelEnd);
+            this.gameObjects.push(levelEnd);
+            // TODO: 2) change level format and jsons to support multiple levelends
+        }
+        Dispose() {
+            var _a;
+            this.layers.forEach(l => l.Dispose());
+            this.layers = [];
+            this.Background.Dispose();
+            this.Hero.Dispose();
+            (_a = this.attack) === null || _a === void 0 ? void 0 : _a.Dispose();
+            this.gameObjects.forEach(e => e.Dispose());
+            this.gameObjects = [];
+            this.restartEventListeners = [];
+            this.nextLevelEventListeners = [];
+            this.endConditionsMetEventListeners = [];
+            this.events.forEach(e => e.Dispose());
+            this.events.clear();
+            this.StopMusic();
+            this.music = null;
+        }
+    }
+    exports.Level = Level;
+});
+define("EscapeEvent", ["require", "exports", "gl-matrix", "SoundEffectPool", "BoundingBox"], function (require, exports, gl_matrix_22, SoundEffectPool_15, BoundingBox_12) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.EscapeEvent = exports.FreeCameraEvent = exports.LevelEventTrigger = void 0;
+    class LevelEventTrigger {
+        constructor(level, position, eventName) {
+            this.level = level;
+            this.position = position;
+            this.eventName = eventName;
+        }
+        Draw(proj, view) {
+            // Invisible
+        }
+        Update(delta) {
+            return;
+        }
+        Visit(hero) {
+            this.level.ChangeEvent(this.eventName);
+        }
+        get EndCondition() {
+            return false;
+        }
+        CollideWithAttack(attack) {
+            // invisible & invincible
+        }
+        get BoundingBox() {
+            return new BoundingBox_12.BoundingBox(this.position, gl_matrix_22.vec2.fromValues(1, 1));
+        }
+        IsCollidingWith(boundingBox, _) {
+            return boundingBox.IsCollidingWith(this.BoundingBox);
+        }
+        Dispose() {
+            // Nothing to dispose ATM
+        }
+    }
+    exports.LevelEventTrigger = LevelEventTrigger;
+    class FreeCameraEvent {
+        constructor(camera, mainLayer, hero) {
+            this.camera = camera;
+            this.mainLayer = mainLayer;
+            this.hero = hero;
+        }
+        get EventKey() {
+            return FreeCameraEvent.EVENT_KEY;
+        }
+        Update(_) {
+            this.camera.LookAtPosition(gl_matrix_22.vec3.clone(this.hero.Position), this.mainLayer);
+        }
+        Dispose() {
+            // nothing to dispose
+        }
+    }
+    exports.FreeCameraEvent = FreeCameraEvent;
+    FreeCameraEvent.EVENT_KEY = 'free_camera_event';
+    // TODO: animate lava
+    // TODO: make level wider + confine camera inside so camera shake wont reveal missing tiles on the borders
+    class EscapeEvent {
+        constructor(camera, eventLayer, mainLayer, hero, eventLayerStopPosition, eventLayerSpeed, cameraStopPos, cameraSpeed, shakeSound, explosionSound, music) {
+            this.camera = camera;
+            this.eventLayer = eventLayer;
+            this.mainLayer = mainLayer;
+            this.hero = hero;
+            this.eventLayerStopPosition = eventLayerStopPosition;
+            this.eventLayerSpeed = eventLayerSpeed;
+            this.cameraStopPos = cameraStopPos;
+            this.cameraSpeed = cameraSpeed;
+            this.shakeSound = shakeSound;
+            this.explosionSound = explosionSound;
+            this.music = music;
+            this.elapsedTime = 0;
+            this.state = 0;
+            this.started = false;
+            this.eventCameraYPos = eventLayer.MaxY;
+            // Set up the camera to the expected state
+            this.camera.Shake = false;
+            this.shakeSound.Stop();
+            this.music.Stop();
+        }
+        get EventKey() {
+            return EscapeEvent.EVENT_KEY;
+        }
+        static async Create(camera, eventLayer, mainLayer, hero, eventLayerStopPosition, eventLayerSpeed, cameraStopPosition, cameraSpeed) {
+            const shakeSound = await SoundEffectPool_15.SoundEffectPool.GetInstance().GetAudio('audio/shake.wav', false);
+            const music = await SoundEffectPool_15.SoundEffectPool.GetInstance().GetAudio('audio/escape.mp3', false);
+            const explosionSound = await SoundEffectPool_15.SoundEffectPool.GetInstance().GetAudio('audio/explosion.mp3', false);
+            return new EscapeEvent(camera, eventLayer, mainLayer, hero, eventLayerStopPosition, eventLayerSpeed, cameraStopPosition, cameraSpeed, shakeSound, explosionSound, music);
+        }
+        Update(delta) {
+            if (this.started) {
+                this.elapsedTime += delta;
+            }
+            if (this.state === 0) {
+                if (!this.started) {
+                    this.started = true;
+                    this.shakeSound.Play();
+                    this.camera.Shake = true;
+                    this.state++;
+                }
+            }
+            else if (this.state === 1) {
+                if (this.elapsedTime > 3000) {
+                    this.explosionSound.Play(1, 1, null, false);
+                    this.state++;
+                }
+            }
+            else if (this.state === 2) {
+                if (this.elapsedTime > 3000) {
+                    this.music.Play(1, 0.4, null, false);
+                    // max offset
+                    if (this.eventLayer.MinY + this.eventLayer.LayerOffsetY > this.eventLayerStopPosition) {
+                        this.eventLayer.LayerOffsetY -= this.eventLayerSpeed * delta;
+                    }
+                    else {
+                        this.camera.Shake = false;
+                    }
+                    if (this.eventLayer.IsCollidingWith(this.hero.BoundingBox, true)) {
+                        this.hero.DamageWithInvincibilityConsidered(gl_matrix_22.vec3.fromValues(0, -0.02, 0));
+                    }
+                    if (this.eventCameraYPos > this.cameraStopPos) {
+                        this.eventCameraYPos = (this.eventCameraYPos - (this.cameraSpeed * delta));
+                    }
+                    else {
+                        this.state++; // The event "ends" when the camera reaches its final position
+                    }
+                }
+            }
+            const vec = gl_matrix_22.vec3.fromValues((this.eventLayer.MaxX - this.eventLayer.MinX) / 2, this.eventCameraYPos - 5, 0);
+            this.camera.LookAtPosition(vec, this.mainLayer);
+        }
+        Dispose() {
+            this.music.Stop();
+        }
+    }
+    exports.EscapeEvent = EscapeEvent;
+    EscapeEvent.EVENT_KEY = 'escape_event';
 });
 define("main", ["require", "exports", "domready", "Game", "ControllerHandler", "KeyHandler", "Keys"], function (require, exports, domready, Game_1, ControllerHandler_1, KeyHandler_1, Keys_7) {
     "use strict";
