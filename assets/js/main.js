@@ -1,5 +1,9 @@
 'use strict';
 
+const titleText = 'robotjatek.github.io';
+let cursorPosition = 0;
+let cursorState = true;
+
 const router = {
     activeRoute: {
         template: null,
@@ -75,6 +79,27 @@ const onPageLoad = async () => {
         const page = split[1];
         const subPage = split[2];
         await router.navigate(page, subPage, page + 'Nav');
+    }
+
+    typeTitleLetters();
+}
+
+function typeTitleLetters() {
+    const title = document.getElementById('parallax-title');
+    title.innerText = titleText.substring(0, cursorPosition)+'|';
+
+    if (cursorPosition < titleText.length) {
+        cursorPosition++;
+        const delayBeforeNextChar = Math.random() * 50 + 80;
+        setTimeout(typeTitleLetters, delayBeforeNextChar);
+    } else {
+        // blinking cursor
+        setInterval(() => {
+            cursorState ? 
+                title.innerText = titleText :
+                title.innerText = titleText + '|';
+            cursorState = !cursorState;
+        }, 450);
     }
 }
 

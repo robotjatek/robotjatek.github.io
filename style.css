@@ -129,7 +129,7 @@ body {
     position: relative;
 }
 
-.parallax-title {
+#parallax-title {
     font-size: 4vw;
     margin-left : 15vw;
     margin-top: 15vh;
