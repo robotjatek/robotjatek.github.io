@@ -1,6 +1,6 @@
 'use strict';
 
-const titleText = 'robotjatek.github.io';
+const titleText = location.hostname;
 let cursorPosition = 0;
 let cursorState = true;
 
