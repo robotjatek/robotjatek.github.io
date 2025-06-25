@@ -1,8 +1,32 @@
 'use strict';
 
-const titleText = location.hostname;
-let cursorPosition = 0;
-let cursorState = true;
+const titleTextTyper = {
+    cursorPosition: 0,
+    cursorState: true,
+    blinkInterval: null,
+    titleText: location.hostname,
+
+    type() {
+        const title = document.getElementById('parallax-title');
+        title.innerText = this.titleText.substring(0, this.cursorPosition)+'|';
+
+        if (this.cursorPosition < this.titleText.length) {
+            this.cursorPosition++;
+            const delayBeforeNextChar = Math.random() * 50 + 80;
+            setTimeout(() => this.type(), delayBeforeNextChar);
+        } else {
+            // blinking cursor
+            if (!this.blinkInterval) {
+                this.blinkInterval = setInterval(() => {
+                    this.cursorState ?
+                        title.innerText = this.titleText :
+                        title.innerText = this.titleText + '|';
+                    this.cursorState = !this.cursorState;
+                }, 450);
+            }
+        }
+    }
+}
 
 const router = {
     activeRoute: {
@@ -43,24 +67,30 @@ const router = {
             }
 
             const url = !subPage ? `/pages/${selectedRoute.template}` : `/pages/${path}/${subPage}.html`
-            const page = await getPage(url);
+            const page = await this._getPage(url);
             const contentDiv = document.getElementById('contentContainer');
             contentDiv.innerHTML = page;
         }
     },
-};
 
-const getPage = async (url) => {
-    try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            return 'Template not found';
+    navigateToRouteByUrl: async function () {
+        // Try to navigate to the page defined by the URL
+        const hash = location.hash.slice(1);
+        const [_, page, subPage] = hash.split('/');
+        await this.navigate(page, subPage, page + 'Nav');
+    },
+
+    _getPage: async function (url) {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                return 'Template not found';
+            }
+
+            return await response.text();
+        } catch {
+            return 'Failed to load';
         }
-
-        const page = await response.text();
-        return page;
-    } catch {
-        return 'Failed to load';
     }
 };
 
@@ -74,39 +104,11 @@ const onPageLoad = async () => {
 
     // Preserve active page between page reloads
     if (!router.activeRoute.path) {
-        // Try to navigate to the page defined by the URL
-        const split = window.location.href.split('#');
-        const page = split[1];
-        const subPage = split[2];
-        await router.navigate(page, subPage, page + 'Nav');
+        await router.navigateToRouteByUrl();
     }
 
-    typeTitleLetters();
-}
-
-function typeTitleLetters() {
-    const title = document.getElementById('parallax-title');
-    title.innerText = titleText.substring(0, cursorPosition)+'|';
-
-    if (cursorPosition < titleText.length) {
-        cursorPosition++;
-        const delayBeforeNextChar = Math.random() * 50 + 80;
-        setTimeout(typeTitleLetters, delayBeforeNextChar);
-    } else {
-        // blinking cursor
-        setInterval(() => {
-            cursorState ? 
-                title.innerText = titleText :
-                title.innerText = titleText + '|';
-            cursorState = !cursorState;
-        }, 450);
-    }
+    titleTextTyper.type();
 }
 
 window.addEventListener('load', onPageLoad);
-window.addEventListener('hashchange', async (event) => {
-    const split = event.newURL.split('#');
-    const page = split[1];
-    const subPage = split[2];
-    await router.navigate(page, subPage, page + 'Nav');
-});
+window.addEventListener('hashchange', async () => await router.navigateToRouteByUrl());
