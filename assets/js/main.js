@@ -36,7 +36,7 @@ const router = {
 
     routes: {},
 
-    navigate: async function (path, subPage, navId) {
+    async navigate(path, subPage, navId) {
         // Show default page when no navigation info is present (eg.: first navigation)
         if (!path) {
             await this.navigate('about', null, 'aboutNav');
@@ -50,46 +50,52 @@ const router = {
             return;
         }
 
-        // Remove active class from the previously active navlink
-        if (this.activeRoute) {
-            const oldNav = document.getElementById(this.activeRoute.path + 'Nav');
-            if (oldNav) {
-                oldNav.classList.remove('active');
-            }
-        }
-
         // Change the current route and add the active class to the currently active navlink
         if (path) {
-            this.activeRoute = selectedRoute;
-            const nav = document.getElementById(navId);
-            if (nav) {
-                nav.classList.add('active');
-            }
-
             const url = !subPage ? `/pages/${selectedRoute.template}` : `/pages/${path}/${subPage}.html`
             const page = await this._getPage(url);
+            if (!page) {
+                await this.navigate('404', null, '');
+                return;
+            }
             const contentDiv = document.getElementById('contentContainer');
             contentDiv.innerHTML = page;
+            this._setActiveNav(this.activeRoute.path + 'Nav', navId);
+
+            this.activeRoute.path = selectedRoute.path;
+            this.activeRoute.template = selectedRoute.template;
         }
     },
 
-    navigateToRouteByUrl: async function () {
+    async navigateToRouteByUrl() {
         // Try to navigate to the page defined by the URL
         const hash = location.hash.slice(1);
         const [_, page, subPage] = hash.split('/');
         await this.navigate(page, subPage, page + 'Nav');
     },
 
-    _getPage: async function (url) {
+    async _getPage(url) {
         try {
             const response = await fetch(url);
             if (!response.ok) {
-                return 'Template not found';
+                return null;
             }
 
             return await response.text();
         } catch {
-            return 'Failed to load';
+            return null;
+        }
+    },
+
+    _setActiveNav(oldNavId, newNavId) {
+        const oldNav = document.getElementById(oldNavId);
+        if (oldNav) {
+            oldNav.classList.remove('active');
+        }
+
+        const newNav = document.getElementById(newNavId);
+        if (newNav) {
+            newNav.classList.add('active');
         }
     }
 };
