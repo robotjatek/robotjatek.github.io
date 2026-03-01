@@ -490,24 +490,17 @@ define("Tile", ["require", "exports"], function (require, exports) {
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Tile = void 0;
     class Tile {
-        // TODO: position vector instead of primitives
-        constructor(positionX, positionY, texture) {
-            this.positionX = positionX;
-            this.positionY = positionY;
+        constructor(position, texture) {
+            this.position = position;
             this.texture = texture;
             this.collidable = true;
-            this.positionX = positionX;
-            this.positionY = positionY;
             this.texture = texture;
         }
         get Texture() {
             return this.texture;
         }
-        get PositionX() {
-            return this.positionX;
-        }
-        get PositionY() {
-            return this.positionY;
+        get Position() {
+            return this.position;
         }
         get Collidable() {
             return this.collidable;
@@ -515,12 +508,12 @@ define("Tile", ["require", "exports"], function (require, exports) {
         set Collidable(value) {
             this.collidable = value;
         }
-        IsPointInside(point, offsetX, offsetY) {
+        IsPointInside(point, offset) {
             // A tile is always 1x1
-            const minX = this.positionX + offsetX;
-            const maxX = this.positionX + offsetX + 1;
-            const minY = this.positionY + offsetY;
-            const maxY = this.positionY + offsetY + 1;
+            const minX = this.position[0] + offset[0];
+            const maxX = this.position[0] + offset[0] + 1;
+            const minY = this.position[1] + offset[1];
+            const maxY = this.position[1] + offset[1] + 1;
             return point[0] >= minX && point[0] <= maxX &&
                 point[1] >= minY && point[1] <= maxY;
         }
@@ -529,10 +522,10 @@ define("Tile", ["require", "exports"], function (require, exports) {
                 return false;
             }
             // A tile is always 1x1
-            const minX = this.positionX + offsetX;
-            const maxX = this.positionX + offsetX + 1;
-            const minY = this.positionY + offsetY;
-            const maxY = this.positionY + offsetY + 1;
+            const minX = this.position[0] + offsetX;
+            const maxX = this.position[0] + offsetX + 1;
+            const minY = this.position[1] + offsetY;
+            const maxY = this.position[1] + offsetY + 1;
             const bbMinX = boundingBox.position[0];
             const bbMaxX = boundingBox.position[0] + boundingBox.size[0];
             const bbMinY = boundingBox.position[1];
@@ -548,14 +541,14 @@ define("Utils", ["require", "exports", "Environment"], function (require, export
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Utils = void 0;
     class Utils {
-        static CreateSpriteVertices(positionX, positionY) {
+        static CreateSpriteVertices(position) {
             return [
-                positionX, positionY, 0.0,
-                positionX + 1.0, positionY, 0.0,
-                positionX, positionY + 1.0, 0.0,
-                positionX, positionY + 1.0, 0.0,
-                positionX + 1.0, positionY, 0.0,
-                positionX + 1.0, positionY + 1.0, 0.0
+                position[0], position[1], 0.0,
+                position[0] + 1.0, position[1], 0.0,
+                position[0], position[1] + 1.0, 0.0,
+                position[0], position[1] + 1.0, 0.0,
+                position[0] + 1.0, position[1], 0.0,
+                position[0] + 1.0, position[1] + 1.0, 0.0
             ];
         }
         static CreateCharacterVertices(position, width, height) {
@@ -635,7 +628,7 @@ define("Layer", ["require", "exports", "BoundingBox", "gl-matrix", "Shader", "Sp
             this.initialLayerOffsetX = layerOffsetX;
             this.initialLayerOffsetY = layerOffsetY;
             this.tiles.forEach(t => {
-                const tile = new Tile_1.Tile(t.PositionX, t.PositionY, t.Texture);
+                const tile = new Tile_1.Tile(t.Position, t.Texture);
                 tile.Collidable = t.Collidable;
                 this.initialTileData.push(tile);
             });
@@ -684,24 +677,24 @@ define("Layer", ["require", "exports", "BoundingBox", "gl-matrix", "Shader", "Sp
             return this.tiles.some(tile => tile.IsCollidingWith(boundingBox, this.LayerOffsetX, this.LayerOffsetY));
         }
         get MaxX() {
-            return Math.max(...this.tiles.map(t => t.PositionX + 1), Environment_4.Environment.HorizontalTiles);
+            return Math.max(...this.tiles.map(t => t.Position[0] + 1), Environment_4.Environment.HorizontalTiles);
         }
         get MinX() {
-            return Math.min(...this.tiles.map(t => t.PositionX));
+            return Math.min(...this.tiles.map(t => t.Position[0]));
         }
         get MinY() {
-            return Math.min(...this.tiles.map(t => t.PositionY));
+            return Math.min(...this.tiles.map(t => t.Position[1]));
         }
         get MaxY() {
-            return Math.max(...this.tiles.map(t => t.PositionY + 1));
+            return Math.max(...this.tiles.map(t => t.Position[1] + 1));
         }
         SetCollision(x, y, collidable) {
-            const tile = this.tiles.find(t => t.PositionX === x && t.PositionY === y);
+            const tile = this.tiles.find(t => t.Position[0] === x && t.Position[1] === y);
             if (tile) {
                 tile.Collidable = collidable;
             }
             else {
-                const invisibleTile = new Tile_1.Tile(x, y, null);
+                const invisibleTile = new Tile_1.Tile(gl_matrix_3.vec2.fromValues(x, y), null);
                 invisibleTile.Collidable = collidable;
                 this.tiles.push(invisibleTile);
             }
@@ -745,7 +738,7 @@ define("Layer", ["require", "exports", "BoundingBox", "gl-matrix", "Shader", "Sp
             const batches = [];
             tileMap.forEach((tiles, texture) => {
                 const sprites = tiles.map((t) => {
-                    const vertices = Utils_1.Utils.CreateSpriteVertices(t.PositionX, t.PositionY);
+                    const vertices = Utils_1.Utils.CreateSpriteVertices(t.Position);
                     return new Sprite_2.Sprite(vertices, Utils_1.Utils.DefaultSpriteTextureCoordinates);
                 });
                 batches.push(new SpriteBatch_1.SpriteBatch(shader, sprites, texture));
@@ -790,6 +783,10 @@ define("Camera", ["require", "exports", "gl-matrix", "Environment"], function (r
             position[1] = this.Clamp(position[1], layer.MinY - Environment_5.Environment.VerticalTiles / 2, layer.MaxY - Environment_5.Environment.VerticalTiles / 2) + yShake;
             gl_matrix_4.mat4.translate(this.viewMatrix, gl_matrix_4.mat4.create(), gl_matrix_4.vec3.fromValues(-position[0] + Environment_5.Environment.HorizontalTiles / 2, -position[1] + Environment_5.Environment.VerticalTiles / 2, 0));
             this.position = position;
+        }
+        Reset() {
+            this.shake = false;
+            this.position = gl_matrix_4.vec3.create();
         }
         Clamp(val, min, max) {
             return Math.max(min, Math.min(max, val));
@@ -1086,24 +1083,6 @@ define("FontConfigPool", ["require", "exports", "Lock", "Textbox"], function (re
     }
     exports.FontConfigPool = FontConfigPool;
 });
-define("KeyHandler", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.KeyHandler = void 0;
-    class KeyHandler {
-        constructor() {
-            this.keys = new Map();
-        }
-        SetKey(code, state) {
-            this.keys.set(code, state);
-        }
-        IsPressed(code) {
-            var _a;
-            return (_a = this.keys.get(code)) !== null && _a !== void 0 ? _a : false;
-        }
-    }
-    exports.KeyHandler = KeyHandler;
-});
 define("SoundEffect", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -1225,13 +1204,23 @@ define("SoundEffectPool", ["require", "exports", "Lock", "SoundEffect"], functio
     }
     exports.SoundEffectPool = SoundEffectPool;
 });
-define("IGameobject", ["require", "exports"], function (require, exports) {
+define("KeyHandler", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-});
-define("Projectiles/IProjectile", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.KeyHandler = void 0;
+    class KeyHandler {
+        constructor() {
+            this.keys = new Map();
+        }
+        SetKey(code, state) {
+            this.keys.set(code, state);
+        }
+        IsPressed(code) {
+            var _a;
+            return (_a = this.keys.get(code)) !== null && _a !== void 0 ? _a : false;
+        }
+    }
+    exports.KeyHandler = KeyHandler;
 });
 define("SpriteRenderer", ["require", "exports", "SpriteBatch", "gl-matrix"], function (require, exports, SpriteBatch_3, gl_matrix_7) {
     "use strict";
@@ -1273,6 +1262,377 @@ define("SpriteRenderer", ["require", "exports", "SpriteBatch", "gl-matrix"], fun
     }
     exports.SpriteRenderer = SpriteRenderer;
 });
+define("LevelEnd", ["require", "exports", "Sprite", "gl-matrix", "BoundingBox", "TexturePool", "Shader", "Utils", "SoundEffectPool", "SpriteRenderer"], function (require, exports, Sprite_4, gl_matrix_8, BoundingBox_3, TexturePool_2, Shader_3, Utils_3, SoundEffectPool_1, SpriteRenderer_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.LevelEnd = void 0;
+    class LevelEnd {
+        constructor(position, shader, endReachedEffect, texture, interactCallback, level) {
+            this.position = position;
+            this.shader = shader;
+            this.endReachedEffect = endReachedEffect;
+            this.interactCallback = interactCallback;
+            this.level = level;
+            this.enabled = false;
+            this.size = gl_matrix_8.vec2.fromValues(2, 1);
+            this.interacted = false;
+            this.sprite = new Sprite_4.Sprite(Utils_3.Utils.DefaultSpriteVertices, Utils_3.Utils.DefaultSpriteTextureCoordinates);
+            this.renderer = new SpriteRenderer_1.SpriteRenderer(shader, texture, this.sprite, this.size);
+            this.shader.SetFloatUniform('alpha', LevelEnd.transparentValue);
+        }
+        OnEndConditionsMet() {
+            this.enabled = true;
+            this.shader.SetFloatUniform('alpha', this.enabled ? 1.0 : LevelEnd.transparentValue);
+        }
+        OnEndConditionsLost() {
+            this.enabled = false;
+            this.shader.SetFloatUniform('alpha', this.enabled ? 1.0 : LevelEnd.transparentValue);
+        }
+        get EndCondition() {
+            return false;
+        }
+        set Interacted(interacted) {
+            this.interacted = interacted;
+        }
+        async CollideWithAttack(attack) {
+            // NO-OP
+        }
+        get BoundingBox() {
+            return new BoundingBox_3.BoundingBox(this.position, gl_matrix_8.vec2.fromValues(this.size[0], this.size[1]));
+        }
+        static async Create(position, interactCallback, level) {
+            const shader = await Shader_3.Shader.Create('shaders/VertexShader.vert', 'shaders/Transparent.frag');
+            const endReachedEffect = await SoundEffectPool_1.SoundEffectPool.GetInstance().GetAudio('audio/ding.wav', false);
+            const texture = await TexturePool_2.TexturePool.GetInstance().GetTexture('textures/exit.png');
+            return new LevelEnd(position, shader, endReachedEffect, texture, interactCallback, level);
+        }
+        Draw(projection, view) {
+            this.renderer.Draw(projection, view, this.position, 0);
+        }
+        async Update(delta) {
+        }
+        IsCollidingWith(boundingBox) {
+            return boundingBox.IsCollidingWith(this.BoundingBox);
+        }
+        async Visit(hero) {
+            if (this.enabled && !this.interacted) {
+                this.level.updateDisabled = true; // pause level updates
+                await this.endReachedEffect.Play(1, 1, async () => {
+                    /**
+                     * Wait for the sound effect to play then restart level update loop.
+                    */
+                    this.interacted = true;
+                    await this.interactCallback();
+                });
+            }
+        }
+        Dispose() {
+            this.renderer.Dispose();
+            this.shader.Delete();
+        }
+    }
+    exports.LevelEnd = LevelEnd;
+    LevelEnd.transparentValue = 0.5;
+});
+define("Components/FlashOverlayComponent", ["require", "exports", "gl-matrix"], function (require, exports, gl_matrix_9) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.FlashOverlayComponent = void 0;
+    /**
+     * Flashes the given entity for a given amount of time with a given color.
+     * NOTE: the used shader must have a 'colorOverlay' uniform defined
+     */
+    class FlashOverlayComponent {
+        constructor(shader) {
+            this.shader = shader;
+            this.DAMAGE_FLASH_DURATION = 1. / 60 * 1000 * 15;
+            this.DAMAGE_OVERLAY_COLOR = gl_matrix_9.vec4.fromValues(1, 0, 0, 0);
+            this.ATTACK_SIGNAL_DURATION = 5 / 60 * 1000;
+            this.ATTACK_SIGNAL_COLOR = gl_matrix_9.vec4.fromValues(0.65, 0.65, 0.65, 0);
+            this.flashing = false;
+            this.flashTimer = 0;
+            this.flashDuration = 0;
+        }
+        Update(delta) {
+            if (this.flashing) {
+                this.flashTimer += delta;
+            }
+            // remove the damage overlay
+            if (this.flashTimer >= this.flashDuration) {
+                this.RemoveFlash();
+            }
+        }
+        Flash(color, duration) {
+            // remove the existing overlays
+            if (this.flashing) {
+                this.RemoveFlash();
+            }
+            this.flashDuration = duration;
+            this.shader.SetVec4Uniform('colorOverlay', color);
+            this.flashing = true;
+        }
+        RemoveFlash() {
+            this.shader.SetVec4Uniform('colorOverlay', gl_matrix_9.vec4.create());
+            this.flashing = false;
+            this.flashTimer = 0;
+        }
+    }
+    exports.FlashOverlayComponent = FlashOverlayComponent;
+});
+define("Components/PhysicsComponent", ["require", "exports", "gl-matrix", "BoundingBox"], function (require, exports, gl_matrix_10, BoundingBox_4) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.PhysicsComponent = void 0;
+    class PhysicsComponent {
+        constructor(position, lastPosition, boundingBox, bbOffset, collider, flying, canGoOutOfBounds = false) {
+            this.position = position;
+            this.lastPosition = lastPosition;
+            this.boundingBox = boundingBox;
+            this.bbOffset = bbOffset;
+            this.collider = collider;
+            this.flying = flying;
+            this.canGoOutOfBounds = canGoOutOfBounds;
+            this.gravityEnabled = true;
+            this.GRAVITY = gl_matrix_10.vec3.fromValues(0, 0.00023, 0);
+            this.velocity = gl_matrix_10.vec3.create();
+            this.externalForce = gl_matrix_10.vec3.create();
+            this.onGround = false;
+            this.xCollide = false;
+            this.yCollide = false;
+        }
+        Update(delta) {
+            gl_matrix_10.vec3.copy(this.lastPosition, this.position);
+            this.xCollide = false;
+            this.yCollide = false;
+            if (!this.flying && this.gravityEnabled) {
+                this.ApplyGravityToVelocity(delta);
+            }
+            this.ApplyDamping(delta);
+            this.ApplyExternalForceToVelocity();
+            const boundingBox = this.boundingBox();
+            const nextX = this.CalculateNextPosition(gl_matrix_10.vec3.fromValues(this.velocity[0], 0, 0), delta);
+            const bbPosX = gl_matrix_10.vec3.add(gl_matrix_10.vec3.create(), nextX, this.bbOffset);
+            const bbX = new BoundingBox_4.BoundingBox(bbPosX, boundingBox.size);
+            if (this.collider.IsCollidingWith(bbX, !this.canGoOutOfBounds)) {
+                this.velocity[0] = 0;
+                this.xCollide = true;
+            }
+            else {
+                this.position[0] = nextX[0];
+            }
+            const nextY = this.CalculateNextPosition(gl_matrix_10.vec3.fromValues(0, this.velocity[1], 0), delta);
+            const bbPosY = gl_matrix_10.vec3.add(gl_matrix_10.vec3.create(), gl_matrix_10.vec3.fromValues(this.position[0], nextY[1], this.position[2]), this.bbOffset);
+            const bbY = new BoundingBox_4.BoundingBox(bbPosY, boundingBox.size);
+            if (this.collider.IsCollidingWith(bbY, !this.canGoOutOfBounds)) {
+                const movingDownward = this.velocity[1] > 0;
+                const stopped = Math.abs(this.velocity[1]) < 0.00001;
+                this.velocity[1] = 0;
+                this.yCollide = true;
+                this.onGround = movingDownward || stopped;
+            }
+            else {
+                this.position[1] = nextY[1];
+                this.onGround = false;
+            }
+            gl_matrix_10.vec3.set(this.externalForce, 0, 0, 0);
+        }
+        get OnGround() {
+            return this.onGround;
+        }
+        get Colliding() {
+            return this.xCollide || this.yCollide;
+        }
+        get Velocity() {
+            return this.velocity;
+        }
+        DisableGravity() {
+            this.gravityEnabled = false;
+        }
+        EnableGravity() {
+            this.gravityEnabled = true;
+        }
+        AddToExternalForce(force) {
+            gl_matrix_10.vec3.add(this.externalForce, this.externalForce, force);
+        }
+        WillCollide(delta) {
+            const nextX = this.CalculateNextPosition(gl_matrix_10.vec3.fromValues(this.velocity[0], 0, 0), delta);
+            const nextY = this.CalculateNextPosition(gl_matrix_10.vec3.fromValues(0, this.velocity[1], 0), delta);
+            return this.CheckCollisionWithCollider(nextX, this.boundingBox(), this.bbOffset) ||
+                this.CheckCollisionWithCollider(nextY, this.boundingBox(), this.bbOffset);
+        }
+        ResetVelocity() {
+            gl_matrix_10.vec3.set(this.velocity, 0, 0, 0);
+            this.externalForce = gl_matrix_10.vec3.create();
+        }
+        ResetVerticalVelocity() {
+            this.velocity[1] = 0;
+            this.externalForce[1] = 0;
+        }
+        ApplyExternalForceToVelocity() {
+            gl_matrix_10.vec3.add(this.velocity, this.velocity, this.externalForce);
+        }
+        ApplyGravityToVelocity(delta) {
+            gl_matrix_10.vec3.add(this.velocity, this.velocity, gl_matrix_10.vec3.scale(gl_matrix_10.vec3.create(), this.GRAVITY, delta));
+        }
+        CalculateNextPosition(velocity, delta) {
+            return gl_matrix_10.vec3.scaleAndAdd(gl_matrix_10.vec3.create(), this.position, velocity, delta);
+        }
+        CheckCollisionWithCollider(nextPosition, boundingBox, bbOffset) {
+            const nextBbPos = gl_matrix_10.vec3.add(gl_matrix_10.vec3.create(), nextPosition, bbOffset);
+            const nextBoundingBox = new BoundingBox_4.BoundingBox(nextBbPos, boundingBox.size);
+            return this.collider.IsCollidingWith(nextBoundingBox, !this.canGoOutOfBounds);
+        }
+        ApplyDamping(delta) {
+            const groundDamping = 0.75;
+            const airDamping = 0.9;
+            const nonFlyingAirDamping = 0.75;
+            // flying enemies only affected by air damping
+            const damping = this.flying ? airDamping :
+                this.onGround ? groundDamping : nonFlyingAirDamping;
+            const frameDamping = Math.pow(damping, delta / (1000 / 60));
+            gl_matrix_10.vec3.scale(this.velocity, this.velocity, frameDamping);
+            if (Math.abs(this.velocity[0]) < 0.00001) {
+                this.velocity[0] = 0;
+            }
+            if (Math.abs(this.velocity[1]) < 0.00001) {
+                this.velocity[1] = 0;
+            }
+        }
+    }
+    exports.PhysicsComponent = PhysicsComponent;
+});
+define("Components/DamageComponent", ["require", "exports", "gl-matrix"], function (require, exports, gl_matrix_11) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.DamageComponent = void 0;
+    class DamageComponent {
+        constructor(entity, flashOverlay, damageSound, physicsComponent, invincibleMs) {
+            this.entity = entity;
+            this.flashOverlay = flashOverlay;
+            this.damageSound = damageSound;
+            this.physicsComponent = physicsComponent;
+            this.invincibleMs = invincibleMs;
+            this.invincible = false;
+            this.invincibleTime = 0;
+            this.isDamaged = false;
+            this.remainingJumpTime = 0;
+            this.pushbackForce = gl_matrix_11.vec3.create();
+        }
+        Update(delta) {
+            this.DisableInvincibleStateAfter(this.invincibleMs);
+            this.flashOverlay.Update(delta);
+            if (this.invincible) {
+                this.invincibleTime += delta;
+            }
+            if (this.isDamaged && this.remainingJumpTime > 0) {
+                this.Pushback(delta, this.pushbackForce);
+            }
+            else {
+                this.isDamaged = false;
+            }
+        }
+        async Damage(force, damageAmount) {
+            // Damage method should not consider the invincible flag because I don't want to cancel damage with projectiles when stomping
+            if (this.entity.Health > 0) {
+                this.invincible = true;
+                this.flashOverlay.Flash(this.flashOverlay.DAMAGE_OVERLAY_COLOR, this.flashOverlay.DAMAGE_FLASH_DURATION);
+                await this.damageSound.Play();
+                this.entity.Health -= damageAmount;
+                this.isDamaged = true;
+                this.pushbackForce = gl_matrix_11.vec3.clone(force);
+                this.remainingJumpTime = 150; // Time remaining in air after pushback. This is needed to keep adding force to the physics component for a given time
+            }
+        }
+        async DamageWithInvincibilityConsidered(pushbackForce, damage) {
+            if (!this.invincible) {
+                await this.Damage(pushbackForce, damage);
+            }
+        }
+        Pushback(delta, force) {
+            const jDelta = Math.min(this.remainingJumpTime, delta);
+            const scaledForce = gl_matrix_11.vec3.scale(gl_matrix_11.vec3.create(), force, jDelta / (1000 / 60));
+            this.physicsComponent.AddToExternalForce(scaledForce);
+            this.remainingJumpTime -= jDelta;
+        }
+        DisableInvincibleStateAfter(invincibleMs) {
+            if (this.invincibleTime >= invincibleMs) {
+                this.invincible = false;
+                this.invincibleTime = 0;
+            }
+        }
+    }
+    exports.DamageComponent = DamageComponent;
+});
+define("Enemies/IEnemy", ["require", "exports", "gl-matrix", "BoundingBox", "Sprite", "Utils", "Environment", "SpriteRenderer"], function (require, exports, gl_matrix_12, BoundingBox_5, Sprite_5, Utils_4, Environment_6, SpriteRenderer_2) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.EnemyBase = void 0;
+    class EnemyBase {
+        constructor(shader, sprite, texture, bbShader, bbSize, bbOffset, position, visualScale, health) {
+            this.shader = shader;
+            this.sprite = sprite;
+            this.texture = texture;
+            this.bbShader = bbShader;
+            this.bbSize = bbSize;
+            this.bbOffset = bbOffset;
+            this.position = position;
+            this.visualScale = visualScale;
+            this.health = health;
+            this.bbSprite = new Sprite_5.Sprite(Utils_4.Utils.DefaultSpriteVertices, Utils_4.Utils.DefaultSpriteTextureCoordinates);
+            this.renderer = new SpriteRenderer_2.SpriteRenderer(shader, texture, sprite, visualScale);
+            this.bbRenderer = new SpriteRenderer_2.SpriteRenderer(bbShader, null, this.bbSprite, bbSize);
+            bbShader.SetVec4Uniform('clr', gl_matrix_12.vec4.fromValues(1, 0, 0, 0.4));
+        }
+        Draw(proj, view) {
+            this.renderer.Draw(proj, view, this.position, 0);
+            // Bounding box drawing
+            if (Environment_6.Environment.RenderBoundingBoxes) {
+                this.bbRenderer.Draw(proj, view, this.BoundingBox.position, 0);
+            }
+        }
+        get BoundingBox() {
+            return new BoundingBox_5.BoundingBox(gl_matrix_12.vec3.add(gl_matrix_12.vec3.create(), this.position, this.bbOffset), this.bbSize);
+        }
+        async CollideWithAttack(attack) {
+            await this.Damage(attack.PushbackForce, 1);
+        }
+        Dispose() {
+            this.renderer.Dispose();
+            this.bbRenderer.Dispose();
+        }
+        ;
+        get Health() {
+            return this.health;
+        }
+        set Health(health) {
+            this.health = health;
+        }
+        IsCollidingWith(boundingBox) {
+            return boundingBox.IsCollidingWith(this.BoundingBox);
+        }
+        get Position() {
+            return this.position;
+        }
+    }
+    exports.EnemyBase = EnemyBase;
+});
+define("IState", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+});
+define("Enemies/Dragon/States/SharedDragonStateVariables", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.SharedDragonStateVariables = void 0;
+    class SharedDragonStateVariables {
+        constructor() {
+            this.timeSinceLastCharge = 9999;
+            this.timeSinceLastAttack = 0;
+            this.timeSinceLastFireBall = 0;
+        }
+    }
+    exports.SharedDragonStateVariables = SharedDragonStateVariables;
+});
 define("Components/Animation", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -1311,132 +1671,7 @@ define("Components/Animation", ["require", "exports"], function (require, export
     }
     exports.Animation = Animation;
 });
-define("Components/PhysicsComponent", ["require", "exports", "gl-matrix", "BoundingBox"], function (require, exports, gl_matrix_8, BoundingBox_3) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.PhysicsComponent = void 0;
-    class PhysicsComponent {
-        constructor(position, lastPosition, boundingBox, bbOffset, collider, flying, canGoOutOfBounds = false) {
-            this.position = position;
-            this.lastPosition = lastPosition;
-            this.boundingBox = boundingBox;
-            this.bbOffset = bbOffset;
-            this.collider = collider;
-            this.flying = flying;
-            this.canGoOutOfBounds = canGoOutOfBounds;
-            this.gravityEnabled = true;
-            this.GRAVITY = gl_matrix_8.vec3.fromValues(0, 0.00023, 0);
-            this.velocity = gl_matrix_8.vec3.create();
-            this.externalForce = gl_matrix_8.vec3.create();
-            this.onGround = false;
-            this.xCollide = false;
-            this.yCollide = false;
-        }
-        Update(delta) {
-            gl_matrix_8.vec3.copy(this.lastPosition, this.position);
-            this.xCollide = false;
-            this.yCollide = false;
-            if (!this.flying && this.gravityEnabled) {
-                this.ApplyGravityToVelocity(delta);
-            }
-            this.ApplyDamping();
-            this.ApplyExternalForceToVelocity();
-            const boundingBox = this.boundingBox();
-            const nextX = this.CalculateNextPosition(gl_matrix_8.vec3.fromValues(this.velocity[0], 0, 0), delta);
-            const bbPosX = gl_matrix_8.vec3.add(gl_matrix_8.vec3.create(), nextX, this.bbOffset);
-            const bbX = new BoundingBox_3.BoundingBox(bbPosX, boundingBox.size);
-            if (this.collider.IsCollidingWith(bbX, !this.canGoOutOfBounds)) {
-                this.velocity[0] = 0;
-                this.xCollide = true;
-            }
-            else {
-                this.position[0] = nextX[0];
-            }
-            const nextY = this.CalculateNextPosition(gl_matrix_8.vec3.fromValues(0, this.velocity[1], 0), delta);
-            const bbPosY = gl_matrix_8.vec3.add(gl_matrix_8.vec3.create(), gl_matrix_8.vec3.fromValues(this.position[0], nextY[1], this.position[2]), this.bbOffset);
-            const bbY = new BoundingBox_3.BoundingBox(bbPosY, boundingBox.size);
-            if (this.collider.IsCollidingWith(bbY, !this.canGoOutOfBounds)) {
-                const movingDownward = this.velocity[1] > 0;
-                const stopped = Math.abs(this.velocity[1]) < 0.00001;
-                this.velocity[1] = 0;
-                this.yCollide = true;
-                this.onGround = movingDownward || stopped;
-            }
-            else {
-                this.position[1] = nextY[1];
-                this.onGround = false;
-            }
-            gl_matrix_8.vec3.set(this.externalForce, 0, 0, 0);
-        }
-        get OnGround() {
-            return this.onGround;
-        }
-        get Colliding() {
-            return this.xCollide || this.yCollide;
-        }
-        get Velocity() {
-            return this.velocity;
-        }
-        DisableGravity() {
-            this.gravityEnabled = false;
-        }
-        EnableGravity() {
-            this.gravityEnabled = true;
-        }
-        AddToExternalForce(force) {
-            gl_matrix_8.vec3.add(this.externalForce, this.externalForce, force);
-        }
-        WillCollide(delta) {
-            const nextX = this.CalculateNextPosition(gl_matrix_8.vec3.fromValues(this.velocity[0], 0, 0), delta);
-            const nextY = this.CalculateNextPosition(gl_matrix_8.vec3.fromValues(0, this.velocity[1], 0), delta);
-            return this.CheckCollisionWithCollider(nextX, this.boundingBox(), this.bbOffset) ||
-                this.CheckCollisionWithCollider(nextY, this.boundingBox(), this.bbOffset);
-        }
-        ResetVelocity() {
-            gl_matrix_8.vec3.set(this.velocity, 0, 0, 0);
-            this.externalForce = gl_matrix_8.vec3.create();
-        }
-        ResetVerticalVelocity() {
-            this.velocity[1] = 0;
-            this.externalForce[1] = 0;
-        }
-        ApplyExternalForceToVelocity() {
-            gl_matrix_8.vec3.add(this.velocity, this.velocity, this.externalForce);
-        }
-        ApplyGravityToVelocity(delta) {
-            gl_matrix_8.vec3.add(this.velocity, this.velocity, gl_matrix_8.vec3.scale(gl_matrix_8.vec3.create(), this.GRAVITY, delta));
-        }
-        CalculateNextPosition(velocity, delta) {
-            return gl_matrix_8.vec3.scaleAndAdd(gl_matrix_8.vec3.create(), this.position, velocity, delta);
-        }
-        CheckCollisionWithCollider(nextPosition, boundingBox, bbOffset) {
-            const nextBbPos = gl_matrix_8.vec3.add(gl_matrix_8.vec3.create(), nextPosition, bbOffset);
-            const nextBoundingBox = new BoundingBox_3.BoundingBox(nextBbPos, boundingBox.size);
-            return this.collider.IsCollidingWith(nextBoundingBox, !this.canGoOutOfBounds);
-        }
-        ApplyDamping() {
-            const groundDamping = 0.75;
-            const airDamping = 0.9;
-            const nonFlyingAirDamping = 0.75;
-            // flying enemies only affected by air damping
-            const damping = this.flying ? airDamping :
-                this.onGround ? groundDamping : nonFlyingAirDamping;
-            gl_matrix_8.vec3.scale(this.velocity, this.velocity, damping);
-            if (Math.abs(this.velocity[0]) < 0.00001) {
-                this.velocity[0] = 0;
-            }
-            if (Math.abs(this.velocity[1]) < 0.00001) {
-                this.velocity[1] = 0;
-            }
-        }
-    }
-    exports.PhysicsComponent = PhysicsComponent;
-});
-define("IState", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-});
-define("Hero/States/DeadState", ["require", "exports", "gl-matrix"], function (require, exports, gl_matrix_9) {
+define("Hero/States/DeadState", ["require", "exports", "gl-matrix"], function (require, exports, gl_matrix_13) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.DeadState = void 0;
@@ -1448,7 +1683,7 @@ define("Hero/States/DeadState", ["require", "exports", "gl-matrix"], function (r
             this.sharedStateVariables = sharedStateVariables;
             this.animation = animation;
             this.timeLeftInDeadState = 3000;
-            this.dirOnDeath = gl_matrix_9.vec3.create();
+            this.dirOnDeath = gl_matrix_13.vec3.create();
         }
         async Enter() {
             await this.dieSound.Play();
@@ -1462,8 +1697,8 @@ define("Hero/States/DeadState", ["require", "exports", "gl-matrix"], function (r
             if (this.timeLeftInDeadState <= 0) {
                 this.onDeath();
             }
-            this.dirOnDeath = gl_matrix_9.vec3.clone(this.hero.FacingDirection);
-            this.sharedStateVariables.bbSize = gl_matrix_9.vec2.fromValues(this.sharedStateVariables.bbSize[1], this.sharedStateVariables.bbSize[0]);
+            this.dirOnDeath = gl_matrix_13.vec3.clone(this.hero.FacingDirection);
+            this.sharedStateVariables.bbSize = gl_matrix_13.vec2.fromValues(this.sharedStateVariables.bbSize[1], this.sharedStateVariables.bbSize[0]);
             // This is only kind-of correct, but im already in dead state so who cares if the bb is not correctly aligned.
             // The only important thing is not to fall through the geometry...
             this.sharedStateVariables.bbOffset[1] = this.dirOnDeath[0] > 0 ?
@@ -1473,281 +1708,7 @@ define("Hero/States/DeadState", ["require", "exports", "gl-matrix"], function (r
     }
     exports.DeadState = DeadState;
 });
-define("Components/Input/IControlSource", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-});
-define("Keys", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Keys = void 0;
-    class Keys {
-    }
-    exports.Keys = Keys;
-    Keys.W = 'KeyW';
-    Keys.A = 'KeyA';
-    Keys.S = 'KeyS';
-    Keys.D = 'KeyD';
-    Keys.E = 'KeyE';
-    Keys.SPACE = 'Space';
-    Keys.RIGHT_CONTROL = 'ControlRight';
-    Keys.LEFT_CONTROL = 'ControlLeft';
-    Keys.LEFT_SHIFT = 'ShiftLeft';
-    Keys.RIGHT_SHIFT = 'ShiftRight';
-    Keys.ENTER = 'Enter';
-    Keys.LEFT_ARROW = 'ArrowLeft';
-    Keys.RIGHT_ARROW = 'ArrowRight';
-    Keys.UP_ARROW = 'ArrowUp';
-    Keys.DOWN_ARROW = 'ArrowDown';
-});
-define("XBoxControllerKeys", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.XBoxControllerKeys = void 0;
-    class XBoxControllerKeys {
-    }
-    exports.XBoxControllerKeys = XBoxControllerKeys;
-    XBoxControllerKeys.A = 0;
-    XBoxControllerKeys.B = 1;
-    XBoxControllerKeys.X = 2;
-    XBoxControllerKeys.Y = 3;
-    XBoxControllerKeys.LB = 4;
-    XBoxControllerKeys.RB = 5;
-    XBoxControllerKeys.LT = 6;
-    XBoxControllerKeys.RT = 7;
-    XBoxControllerKeys.SELECT = 8;
-    XBoxControllerKeys.START = 9;
-    XBoxControllerKeys.L3 = 10;
-    XBoxControllerKeys.R3 = 11;
-    XBoxControllerKeys.UP = 12;
-    XBoxControllerKeys.DOWN = 13;
-    XBoxControllerKeys.LEFT = 14;
-    XBoxControllerKeys.RIGHT = 15;
-});
-define("Components/Input/PlayerControlSource", ["require", "exports", "Keys", "XBoxControllerKeys"], function (require, exports, Keys_1, XBoxControllerKeys_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.PlayerControlSource = void 0;
-    class PlayerControlSource {
-        constructor(keyHandler, gamepadHandler) {
-            this.keyHandler = keyHandler;
-            this.gamepadHandler = gamepadHandler;
-        }
-        Attack() {
-            return (this.keyHandler.IsPressed(Keys_1.Keys.E) || this.gamepadHandler.IsPressed(XBoxControllerKeys_1.XBoxControllerKeys.X) ||
-                this.keyHandler.IsPressed(Keys_1.Keys.LEFT_CONTROL) || this.keyHandler.IsPressed(Keys_1.Keys.RIGHT_SHIFT));
-        }
-        Dash() {
-            return (this.keyHandler.IsPressed(Keys_1.Keys.LEFT_SHIFT) ||
-                this.gamepadHandler.IsPressed(XBoxControllerKeys_1.XBoxControllerKeys.RB));
-        }
-        Jump() {
-            return (this.keyHandler.IsPressed(Keys_1.Keys.SPACE) ||
-                this.keyHandler.IsPressed(Keys_1.Keys.UP_ARROW) ||
-                this.keyHandler.IsPressed(Keys_1.Keys.W) ||
-                this.gamepadHandler.IsPressed(XBoxControllerKeys_1.XBoxControllerKeys.A));
-        }
-        Left() {
-            return (this.keyHandler.IsPressed(Keys_1.Keys.A) ||
-                this.keyHandler.IsPressed(Keys_1.Keys.LEFT_ARROW) ||
-                this.gamepadHandler.IsPressed(XBoxControllerKeys_1.XBoxControllerKeys.LEFT) ||
-                this.gamepadHandler.LeftStick[0] < -0.5);
-        }
-        Right() {
-            return (this.keyHandler.IsPressed(Keys_1.Keys.D) ||
-                this.keyHandler.IsPressed(Keys_1.Keys.RIGHT_ARROW) ||
-                this.gamepadHandler.IsPressed(XBoxControllerKeys_1.XBoxControllerKeys.RIGHT) ||
-                this.gamepadHandler.LeftStick[0] > 0.5);
-        }
-        Stomp() {
-            return (this.keyHandler.IsPressed(Keys_1.Keys.S) ||
-                this.keyHandler.IsPressed(Keys_1.Keys.DOWN_ARROW) ||
-                this.gamepadHandler.IsPressed(XBoxControllerKeys_1.XBoxControllerKeys.DOWN) ||
-                this.gamepadHandler.LeftStick[1] > 0.8);
-        }
-    }
-    exports.PlayerControlSource = PlayerControlSource;
-});
-define("Components/Input/InputSource", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.InputSource = void 0;
-    class InputSource {
-        constructor() {
-            this.pressedKeys = new Set();
-        }
-        PressKey(key) {
-            this.pressedKeys.add(key);
-        }
-        IsPressed(key) {
-            if (this.pressedKeys.has(key)) {
-                this.pressedKeys.delete(key);
-                return true;
-            }
-            return false;
-        }
-    }
-    exports.InputSource = InputSource;
-});
-define("Components/Input/ScriptControlSource", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.ScriptControlSource = void 0;
-    class ScriptControlSource {
-        constructor(input) {
-            this.input = input;
-        }
-        Attack() {
-            return false;
-        }
-        Dash() {
-            return false;
-        }
-        Jump() {
-            return false;
-        }
-        Left() {
-            return this.input.IsPressed("left");
-        }
-        Right() {
-            return this.input.IsPressed("right");
-        }
-        Stomp() {
-            return false;
-        }
-    }
-    exports.ScriptControlSource = ScriptControlSource;
-});
-define("Components/FlashOverlayComponent", ["require", "exports", "gl-matrix"], function (require, exports, gl_matrix_10) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.FlashOverlayComponent = void 0;
-    /**
-     * Flashes the given entity for a given amount of time with a given color.
-     * NOTE: the used shader must have a 'colorOverlay' uniform defined
-     */
-    class FlashOverlayComponent {
-        constructor(shader) {
-            this.shader = shader;
-            this.DAMAGE_FLASH_DURATION = 1. / 60 * 1000 * 15;
-            this.DAMAGE_OVERLAY_COLOR = gl_matrix_10.vec4.fromValues(1, 0, 0, 0);
-            this.ATTACK_SIGNAL_DURATION = 5 / 60 * 1000;
-            this.ATTACK_SIGNAL_COLOR = gl_matrix_10.vec4.fromValues(0.65, 0.65, 0.65, 0);
-            this.flashing = false;
-            this.flashTimer = 0;
-            this.flashDuration = 0;
-        }
-        Update(delta) {
-            if (this.flashing) {
-                this.flashTimer += delta;
-            }
-            // remove the damage overlay
-            if (this.flashTimer >= this.flashDuration) {
-                this.RemoveFlash();
-            }
-        }
-        Flash(color, duration) {
-            // remove the existing overlays
-            if (this.flashing) {
-                this.RemoveFlash();
-            }
-            this.flashDuration = duration;
-            this.shader.SetVec4Uniform('colorOverlay', color);
-            this.flashing = true;
-        }
-        RemoveFlash() {
-            this.shader.SetVec4Uniform('colorOverlay', gl_matrix_10.vec4.create());
-            this.flashing = false;
-            this.flashTimer = 0;
-        }
-    }
-    exports.FlashOverlayComponent = FlashOverlayComponent;
-});
-define("Components/DamageComponent", ["require", "exports", "gl-matrix"], function (require, exports, gl_matrix_11) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.DamageComponent = void 0;
-    class DamageComponent {
-        constructor(entity, flashOverlay, damageSound, physicsComponent, invincibleFrames) {
-            this.entity = entity;
-            this.flashOverlay = flashOverlay;
-            this.damageSound = damageSound;
-            this.physicsComponent = physicsComponent;
-            this.invincibleFrames = invincibleFrames;
-            this.invincible = false;
-            this.invincibleTime = 0;
-            this.isDamaged = false;
-            this.remainingJumpTime = 0;
-            this.pushbackForce = gl_matrix_11.vec3.create();
-        }
-        Update(delta) {
-            this.DisableInvincibleStateAfter(delta, this.invincibleFrames);
-            this.flashOverlay.Update(delta);
-            if (this.invincible) {
-                this.invincibleTime += delta;
-            }
-            if (this.isDamaged && this.remainingJumpTime > 0) {
-                this.Pushback(delta, this.pushbackForce);
-            }
-            else {
-                this.isDamaged = false;
-            }
-        }
-        async Damage(force, damageAmount) {
-            // Damage method should not consider the invincible flag because I don't want to cancel damage with projectiles when stomping
-            if (this.entity.Health > 0) {
-                this.invincible = true;
-                this.flashOverlay.Flash(this.flashOverlay.DAMAGE_OVERLAY_COLOR, this.flashOverlay.DAMAGE_FLASH_DURATION);
-                await this.damageSound.Play();
-                this.entity.Health -= damageAmount;
-                this.isDamaged = true;
-                this.pushbackForce = gl_matrix_11.vec3.clone(force);
-                this.remainingJumpTime = 150; // Time remaining in air after pushback. This is needed to keep adding force to the physics component for a given time
-            }
-        }
-        async DamageWithInvincibilityConsidered(pushbackForce, damage) {
-            if (!this.invincible) {
-                await this.Damage(pushbackForce, damage);
-            }
-        }
-        Pushback(delta, force) {
-            const jDelta = Math.min(this.remainingJumpTime, delta);
-            this.physicsComponent.AddToExternalForce(force);
-            this.remainingJumpTime -= jDelta;
-        }
-        DisableInvincibleStateAfter(delta, numberOfFrames) {
-            if (this.invincibleTime > 1.0 / 60 * 1000 * numberOfFrames) {
-                this.invincible = false;
-                this.invincibleTime = 0;
-            }
-            this.invincible ? this.invincibleTime += delta : this.invincibleTime = 0;
-        }
-    }
-    exports.DamageComponent = DamageComponent;
-});
-define("Hero/HeroMovementBehaviour", ["require", "exports", "gl-matrix"], function (require, exports, gl_matrix_12) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.HeroMovementBehaviour = void 0;
-    class HeroMovementBehaviour {
-        constructor(hero, physicsComponent) {
-            this.hero = hero;
-            this.physicsComponent = physicsComponent;
-        }
-        MoveLeft(delta) {
-            this.physicsComponent.AddToExternalForce(gl_matrix_12.vec3.scale(gl_matrix_12.vec3.create(), gl_matrix_12.vec3.fromValues(-this.hero.Speed, 0, 0), delta));
-            this.hero.SetAnimationFrameset("left_walk");
-            this.hero.FaceLeft();
-        }
-        MoveRight(delta) {
-            this.physicsComponent.AddToExternalForce(gl_matrix_12.vec3.scale(gl_matrix_12.vec3.create(), gl_matrix_12.vec3.fromValues(this.hero.Speed, 0, 0), delta));
-            this.hero.SetAnimationFrameset("right_walk");
-            this.hero.FaceRight();
-        }
-    }
-    exports.HeroMovementBehaviour = HeroMovementBehaviour;
-});
-define("Projectiles/ProjectileBase", ["require", "exports", "BoundingBox", "gl-matrix", "Sprite", "Utils", "Environment", "SpriteRenderer", "Components/PhysicsComponent", "Hero/States/DeadState"], function (require, exports, BoundingBox_4, gl_matrix_13, Sprite_4, Utils_3, Environment_6, SpriteRenderer_1, PhysicsComponent_1, DeadState_1) {
+define("Projectiles/ProjectileBase", ["require", "exports", "BoundingBox", "gl-matrix", "Sprite", "Utils", "Environment", "SpriteRenderer", "Components/PhysicsComponent", "Hero/States/DeadState"], function (require, exports, BoundingBox_6, gl_matrix_14, Sprite_6, Utils_5, Environment_7, SpriteRenderer_3, PhysicsComponent_1, DeadState_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.ProjectileBase = void 0;
@@ -1764,19 +1725,19 @@ define("Projectiles/ProjectileBase", ["require", "exports", "BoundingBox", "gl-m
             this.animationMustComplete = animationMustComplete;
             this.collider = collider;
             this.bbShader = bbShader;
-            this.bbSprite = new Sprite_4.Sprite(Utils_3.Utils.DefaultSpriteVertices, Utils_3.Utils.DefaultSpriteTextureCoordinates);
+            this.bbSprite = new Sprite_6.Sprite(Utils_5.Utils.DefaultSpriteVertices, Utils_5.Utils.DefaultSpriteTextureCoordinates);
             this.alreadyHit = false;
             this.OnHitListeners = [];
-            this.renderer = new SpriteRenderer_1.SpriteRenderer(shader, texture, sprite, visualScale);
-            this.bbRenderer = new SpriteRenderer_1.SpriteRenderer(bbShader, null, this.bbSprite, bbSize);
-            this.physicsComponent = new PhysicsComponent_1.PhysicsComponent(position, gl_matrix_13.vec3.create(), () => this.BoundingBox, bbOffset, collider, true, true);
-            bbShader.SetVec4Uniform('clr', gl_matrix_13.vec4.fromValues(1, 0, 0, 0.4));
+            this.renderer = new SpriteRenderer_3.SpriteRenderer(shader, texture, sprite, visualScale);
+            this.bbRenderer = new SpriteRenderer_3.SpriteRenderer(bbShader, null, this.bbSprite, bbSize);
+            this.physicsComponent = new PhysicsComponent_1.PhysicsComponent(position, gl_matrix_14.vec3.create(), () => this.BoundingBox, bbOffset, collider, true, true);
+            bbShader.SetVec4Uniform('clr', gl_matrix_14.vec4.fromValues(1, 0, 0, 0.4));
         }
         Draw(proj, view) {
             if (!this.AlreadyHit || this.animationMustComplete) {
                 this.renderer.Draw(proj, view, this.position, 0);
             }
-            if (Environment_6.Environment.RenderBoundingBoxes) {
+            if (Environment_7.Environment.RenderBoundingBoxes) {
                 this.bbRenderer.Draw(proj, view, this.BoundingBox.position, 0);
             }
         }
@@ -1787,8 +1748,8 @@ define("Projectiles/ProjectileBase", ["require", "exports", "BoundingBox", "gl-m
             return false;
         }
         get BoundingBox() {
-            const bbPos = gl_matrix_13.vec3.add(gl_matrix_13.vec3.create(), this.position, this.bbOffset); // Adjust bb position with the offset
-            return new BoundingBox_4.BoundingBox(bbPos, this.bbSize);
+            const bbPos = gl_matrix_14.vec3.add(gl_matrix_14.vec3.create(), this.position, this.bbOffset); // Adjust bb position with the offset
+            return new BoundingBox_6.BoundingBox(bbPos, this.bbSize);
         }
         async CollideWithAttack(attack) {
             // Do nothing
@@ -1817,7 +1778,7 @@ define("Projectiles/ProjectileBase", ["require", "exports", "BoundingBox", "gl-m
         async Move(direction, delta) {
             var _a;
             if (!this.physicsComponent.Colliding) {
-                this.physicsComponent.AddToExternalForce(gl_matrix_13.vec3.scale(gl_matrix_13.vec3.create(), direction, delta));
+                this.physicsComponent.AddToExternalForce(gl_matrix_14.vec3.scale(gl_matrix_14.vec3.create(), direction, delta));
             }
             else {
                 await ((_a = this.hitSound) === null || _a === void 0 ? void 0 : _a.Play());
@@ -1830,755 +1791,39 @@ define("Projectiles/ProjectileBase", ["require", "exports", "BoundingBox", "gl-m
     }
     exports.ProjectileBase = ProjectileBase;
 });
-define("Projectiles/MeleeAttack", ["require", "exports", "gl-matrix", "Shader", "Sprite", "TexturePool", "Utils", "SoundEffectPool", "Projectiles/ProjectileBase", "Components/Animation", "ICollider"], function (require, exports, gl_matrix_14, Shader_3, Sprite_5, TexturePool_2, Utils_4, SoundEffectPool_1, ProjectileBase_1, Animation_1, ICollider_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.MeleeAttack = void 0;
-    // MeleeAttack is considered as a stationary projectile
-    class MeleeAttack extends ProjectileBase_1.ProjectileBase {
-        constructor(position, facingDirection, shader, bbShader, attackSound, texture) {
-            const spriteVisualScale = gl_matrix_14.vec2.fromValues(4, 3);
-            const bbSize = gl_matrix_14.vec2.fromValues(1.25, 2);
-            const bbOffset = facingDirection[0] > 0 ?
-                gl_matrix_14.vec3.fromValues(1.25, 0.5, 0) :
-                gl_matrix_14.vec3.fromValues(-(bbSize[0] - 2.75), 0.5, 0);
-            const sprite = new Sprite_5.Sprite(Utils_4.Utils.DefaultSpriteVertices, Utils_4.Utils.CreateTextureCoordinates(0.0 / 5.0, 0.0 / 2.0, 1.0 / 5.0, 1.0 / 2.0));
-            const animationMustComplete = true;
-            super(shader, texture, sprite, position, spriteVisualScale, bbOffset, bbSize, null, animationMustComplete, new ICollider_1.NullCollider(), bbShader);
-            this.facingDirection = facingDirection;
-            this.attackSound = attackSound;
-            this.attackSoundPlayed = false;
-            this.currentFrameSet = [
-                gl_matrix_14.vec2.fromValues(1 / 5.0, 1 / 2.0),
-                gl_matrix_14.vec2.fromValues(2 / 5.0, 1 / 2.0),
-                gl_matrix_14.vec2.fromValues(3 / 5.0, 1 / 2.0)
-            ];
-            this.animation = new Animation_1.Animation(1 / 30 * 1000, this.renderer);
-            this.renderer.TextureOffset = this.currentFrameSet[0];
-        }
-        async CollideWithAttack(attack) {
-            // No-op as hero attacks shouldn't interact with each other
-        }
-        static async Create(position, facingDirection) {
-            // TODO: i really should rename the fragment shader from Hero.frag as everything seems to use it...
-            const shader = await Shader_3.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
-            const bbShader = await Shader_3.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
-            const attackSound = await SoundEffectPool_1.SoundEffectPool.GetInstance().GetAudio('audio/sword.mp3');
-            const texture = await TexturePool_2.TexturePool.GetInstance().GetTexture('textures/Sword1.png');
-            return new MeleeAttack(position, facingDirection, shader, bbShader, attackSound, texture);
-        }
-        get PushbackForce() {
-            return gl_matrix_14.vec3.fromValues(this.facingDirection[0] * 0.0075, -0.005, 0);
-        }
-        async OnHit() {
-            this.alreadyHit = true;
-            // no hit sound here for the moment as it can differ on every enemy type
-        }
-        async Visit(hero) {
-            // this shouldn't happen as melee attack is an attack by the hero. In the future enemies could use it too...
-            throw new Error('Method not implemented.');
-        }
-        async Update(delta) {
-            if (!this.attackSoundPlayed) {
-                const pitch = 0.8 + Math.random() * (1.4 - 0.8);
-                await this.attackSound.Play(pitch);
-                this.attackSoundPlayed = true;
-            }
-            const animationFinished = this.animation.Animate(delta, this.currentFrameSet);
-            if (animationFinished) {
-                this.alreadyHit = true;
-                this.OnHitListeners.forEach(l => l.DespawnAttack(this));
-            }
-        }
-        Dispose() {
-            super.Dispose();
-            this.shader.Delete();
-            this.bbShader.Delete();
-        }
-    }
-    exports.MeleeAttack = MeleeAttack;
-});
-define("Hero/States/SharedHeroStateVariables", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-});
-define("Hero/States/HeroBaseState", ["require", "exports", "Hero/HeroMovementBehaviour", "Projectiles/MeleeAttack", "gl-matrix"], function (require, exports, HeroMovementBehaviour_1, MeleeAttack_1, gl_matrix_15) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.HeroBaseState = void 0;
-    class HeroBaseState {
-        constructor(hero, physicsComponent, damageComponent, SpawnProjectile, sharedStateVariables) {
-            this.hero = hero;
-            this.physicsComponent = physicsComponent;
-            this.damageComponent = damageComponent;
-            this.SpawnProjectile = SpawnProjectile;
-            this.sharedStateVariables = sharedStateVariables;
-            this.movementBehaviour = new HeroMovementBehaviour_1.HeroMovementBehaviour(hero, physicsComponent);
-        }
-        async Update(delta) {
-            // Handle death
-            if (this.hero.Health <= 0) {
-                await this.hero.ChangeState(this.hero.DEAD_STATE());
-            }
-            await this.HandleInput();
-            this.OverHealCountdown();
-            this.sharedStateVariables.timeSinceLastMeleeAttack += delta;
-            this.sharedStateVariables.timeInOverHeal += delta;
-            this.sharedStateVariables.timeSinceLastDash += delta;
-            this.sharedStateVariables.timeSinceLastStomp += delta;
-            this.damageComponent.Update(delta);
-            await this.UpdateState(delta);
-        }
-        async HandleInput() {
-            if (this.hero.InputSource.Attack()) {
-                const attackPosition = this.AttackSpawnPosition;
-                if (this.sharedStateVariables.timeSinceLastMeleeAttack > 350) {
-                    this.sharedStateVariables.timeSinceLastMeleeAttack = 0;
-                    if (this.SpawnProjectile) {
-                        // TODO: creating an attack instance on every attack is wasteful.
-                        this.SpawnProjectile(this.hero, await MeleeAttack_1.MeleeAttack.Create(attackPosition, this.hero.FacingDirection));
-                    }
-                }
-            }
-        }
-        get AttackSpawnPosition() {
-            return this.hero.FacingDirection[0] > 0 ?
-                gl_matrix_15.vec3.add(gl_matrix_15.vec3.create(), this.hero.CenterPosition, gl_matrix_15.vec3.fromValues(0, -1, 0)) :
-                gl_matrix_15.vec3.add(gl_matrix_15.vec3.create(), this.hero.CenterPosition, gl_matrix_15.vec3.fromValues(-4, -1, 0));
-        }
-        OverHealCountdown() {
-            if (this.hero.Health > 100) {
-                if (this.sharedStateVariables.timeInOverHeal > 1000) {
-                    this.hero.Health--;
-                    this.sharedStateVariables.timeInOverHeal = 0;
-                }
-            }
-        }
-    }
-    exports.HeroBaseState = HeroBaseState;
-});
-define("Hero/States/IdleState", ["require", "exports", "Hero/States/HeroBaseState"], function (require, exports, HeroBaseState_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.IdleState = void 0;
-    class IdleState extends HeroBaseState_1.HeroBaseState {
-        constructor(hero, spawnProjectile, physicsComponent, damageComponent, sharedStateVariables, animation) {
-            super(hero, physicsComponent, damageComponent, spawnProjectile, sharedStateVariables);
-            this.animation = animation;
-        }
-        async UpdateState(delta) {
-            if (this.hero.InputSource.Left()) {
-                this.movementBehaviour.MoveLeft(delta);
-                await this.hero.ChangeState(this.hero.WALK_STATE());
-            }
-            else if (this.hero.InputSource.Right()) {
-                this.movementBehaviour.MoveRight(delta);
-                await this.hero.ChangeState(this.hero.WALK_STATE());
-            }
-            else if (this.hero.InputSource.Jump()) {
-                await this.hero.ChangeState(this.hero.JUMP_STATE());
-            }
-            else if (this.hero.InputSource.Stomp() &&
-                this.sharedStateVariables.timeSinceLastStomp > 500 &&
-                !this.physicsComponent.OnGround) {
-                await this.hero.ChangeState(this.hero.STOMP_STATE());
-            }
-            if (this.physicsComponent.OnGround && this.sharedStateVariables.dashUsed) {
-                this.sharedStateVariables.dashAvailable = true;
-                this.sharedStateVariables.dashUsed = false;
-            }
-        }
-        async Enter() {
-            this.animation.Stop();
-        }
-        async Exit() {
-            this.animation.Start();
-        }
-    }
-    exports.IdleState = IdleState;
-});
-define("Hero/States/DashState", ["require", "exports", "Hero/States/HeroBaseState", "gl-matrix"], function (require, exports, HeroBaseState_2, gl_matrix_16) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.DashState = void 0;
-    class DashState extends HeroBaseState_2.HeroBaseState {
-        constructor(hero, spawnProjectile, physicsComponent, damageComponent, dashSound, sharedStateVariables) {
-            super(hero, physicsComponent, damageComponent, spawnProjectile, sharedStateVariables);
-            this.dashSound = dashSound;
-            this.done = false;
-        }
-        async UpdateState(delta) {
-            if (!this.done) {
-                this.sharedStateVariables.timeSinceLastDash = 0;
-                this.sharedStateVariables.dashAvailable = false;
-                this.sharedStateVariables.dashUsed = true;
-                this.physicsComponent.AddToExternalForce(gl_matrix_16.vec3.fromValues(0.08 * this.hero.FacingDirection[0], 0, 0));
-                const pitch = 0.8 + Math.random() * (1.25 - 0.8);
-                await this.dashSound.Play(pitch);
-                this.done = true;
-            }
-            if (this.sharedStateVariables.timeSinceLastDash > 300) {
-                await this.hero.ChangeState(this.hero.IDLE_STATE());
-            }
-        }
-        async Enter() {
-            this.physicsComponent.DisableGravity();
-            this.physicsComponent.ResetVerticalVelocity();
-        }
-        async Exit() {
-            this.physicsComponent.EnableGravity();
-        }
-    }
-    exports.DashState = DashState;
-});
-define("Hero/States/StompState", ["require", "exports", "Hero/States/HeroBaseState", "gl-matrix"], function (require, exports, HeroBaseState_3, gl_matrix_17) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.StompState = void 0;
-    class StompState extends HeroBaseState_3.HeroBaseState {
-        constructor(hero, spawnProjectile, physicsComponent, damageComponent, stompSound, sharedStateVariables, landSound) {
-            super(hero, physicsComponent, damageComponent, spawnProjectile, sharedStateVariables);
-            this.stompSound = stompSound;
-            this.landSound = landSound;
-        }
-        async UpdateState(delta) {
-            if (this.physicsComponent.OnGround) {
-                if (gl_matrix_17.vec3.squaredLength(this.physicsComponent.Velocity) < 0.00001) {
-                    await this.hero.ChangeState(this.hero.IDLE_STATE());
-                    this.sharedStateVariables.dashAvailable = true;
-                    await this.landSound.Play(1.8, 0.5);
-                }
-            }
-        }
-        async Enter() {
-            // using Enter() so we only run this part of the code once
-            this.physicsComponent.AddToExternalForce(gl_matrix_17.vec3.fromValues(0, 0.05, 0));
-            this.sharedStateVariables.timeSinceLastStomp = 0;
-            const pitch = 0.8 + Math.random() * (1.25 - 0.8);
-            await this.stompSound.Play(pitch);
-        }
-        async Exit() {
-        }
-    }
-    exports.StompState = StompState;
-});
-define("Hero/States/AfterStompState", ["require", "exports", "Hero/States/HeroBaseState", "gl-matrix"], function (require, exports, HeroBaseState_4, gl_matrix_18) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.AfterStompState = void 0;
-    class AfterStompState extends HeroBaseState_4.HeroBaseState {
-        constructor(hero, spawnProjectile, physicsComponent, damageComponent, sharedStateVariables) {
-            super(hero, physicsComponent, damageComponent, spawnProjectile, sharedStateVariables);
-        }
-        async UpdateState(delta) {
-            this.physicsComponent.AddToExternalForce(gl_matrix_18.vec3.fromValues(0, -0.10, 0));
-            await this.hero.ChangeState(this.hero.IDLE_STATE());
-        }
-        async Enter() {
-            return Promise.resolve(undefined);
-        }
-        async Exit() {
-            return Promise.resolve(undefined);
-        }
-    }
-    exports.AfterStompState = AfterStompState;
-});
-define("Hero/States/JumpState", ["require", "exports", "Hero/States/HeroBaseState", "gl-matrix"], function (require, exports, HeroBaseState_5, gl_matrix_19) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.JumpState = void 0;
-    // TODO: variable jump height
-    class JumpState extends HeroBaseState_5.HeroBaseState {
-        constructor(hero, spawnProjectile, jumpSound, landSound, physicsComponent, damageComponent, sharedStateVariables) {
-            super(hero, physicsComponent, damageComponent, spawnProjectile, sharedStateVariables);
-            this.jumpSound = jumpSound;
-            this.landSound = landSound;
-            this.remainingJumpTime = 0;
-            this.isJumping = false;
-            this.wasInAir = false;
-        }
-        async UpdateState(delta) {
-            if (this.isJumping && this.remainingJumpTime > 0) {
-                const force = gl_matrix_19.vec3.fromValues(0, -0.013, 0);
-                const jDelta = Math.min(this.remainingJumpTime, delta);
-                this.physicsComponent.AddToExternalForce(force);
-                this.remainingJumpTime -= jDelta;
-                if (this.remainingJumpTime <= 0 && this.physicsComponent.OnGround) {
-                    this.isJumping = false;
-                }
-            }
-            if (this.hero.InputSource.Left()) {
-                this.movementBehaviour.MoveLeft(delta);
-            }
-            else if (this.hero.InputSource.Right()) {
-                this.movementBehaviour.MoveRight(delta);
-            }
-            if (this.hero.InputSource.Dash()) {
-                if (this.sharedStateVariables.timeSinceLastDash > 300 && this.sharedStateVariables.dashAvailable) {
-                    await this.hero.ChangeState(this.hero.DASH_STATE());
-                }
-            }
-            if (this.hero.InputSource.Stomp() &&
-                this.sharedStateVariables.timeSinceLastStomp > 500) {
-                await this.hero.ChangeState(this.hero.STOMP_STATE());
-            }
-            if (this.physicsComponent.OnGround) {
-                if ((this.wasInAir)) {
-                    await this.hero.ChangeState(this.hero.IDLE_STATE());
-                    this.wasInAir = false;
-                    this.isJumping = false;
-                    await this.landSound.Play(1.8, 0.5);
-                }
-            }
-            else {
-                this.wasInAir = true;
-            }
-        }
-        async Enter() {
-            this.remainingJumpTime = 150;
-            await this.jumpSound.Play();
-            this.isJumping = true;
-        }
-        async Exit() {
-        }
-    }
-    exports.JumpState = JumpState;
-});
-define("Hero/States/WalkState", ["require", "exports", "Hero/States/HeroBaseState"], function (require, exports, HeroBaseState_6) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.WalkState = void 0;
-    class WalkState extends HeroBaseState_6.HeroBaseState {
-        constructor(hero, spawnProjectile, animation, physicsComponent, damageComponent, walkSound, sharedStateVariables) {
-            super(hero, physicsComponent, damageComponent, spawnProjectile, sharedStateVariables);
-            this.animation = animation;
-            this.walkSound = walkSound;
-        }
-        async Enter() {
-        }
-        async Exit() {
-        }
-        async UpdateState(delta) {
-            if (this.hero.InputSource.Left()) {
-                this.movementBehaviour.MoveLeft(delta);
-            }
-            else if (this.hero.InputSource.Right()) {
-                this.movementBehaviour.MoveRight(delta);
-            }
-            else {
-                await this.hero.ChangeState(this.hero.IDLE_STATE());
-            }
-            if (this.hero.InputSource.Dash()) {
-                if (this.sharedStateVariables.timeSinceLastDash > 300 && this.sharedStateVariables.dashAvailable) {
-                    await this.hero.ChangeState(this.hero.DASH_STATE());
-                }
-            }
-            if (this.hero.InputSource.Jump()) {
-                await this.hero.ChangeState(this.hero.JUMP_STATE());
-            }
-            await this.PlayWalkSounds();
-        }
-        async PlayWalkSounds() {
-            if (this.hero.IsWalking && this.physicsComponent.OnGround) {
-                await this.walkSound.Play(1.8, 0.8);
-            }
-        }
-    }
-    exports.WalkState = WalkState;
-});
-define("Hero/Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "TexturePool", "Utils", "BoundingBox", "SoundEffectPool", "SpriteRenderer", "Environment", "Components/Animation", "Components/PhysicsComponent", "Hero/States/DeadState", "Components/Input/PlayerControlSource", "Components/Input/InputSource", "Components/Input/ScriptControlSource", "Components/FlashOverlayComponent", "Components/DamageComponent", "Hero/States/IdleState", "Hero/States/DashState", "Hero/States/StompState", "Hero/States/AfterStompState", "Hero/States/JumpState", "Hero/States/WalkState"], function (require, exports, gl_matrix_20, Shader_4, Sprite_6, TexturePool_3, Utils_5, BoundingBox_5, SoundEffectPool_2, SpriteRenderer_2, Environment_7, Animation_2, PhysicsComponent_2, DeadState_2, PlayerControlSource_1, InputSource_1, ScriptControlSource_1, FlashOverlayComponent_1, DamageComponent_1, IdleState_1, DashState_1, StompState_1, AfterStompState_1, JumpState_1, WalkState_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Hero = void 0;
-    class Hero {
-        IDLE_STATE() {
-            return new IdleState_1.IdleState(this, this.SpawnProjectile, this.physicsComponent, this.damageComponent, this.sharedStateVariables, this.animation);
-        }
-        WALK_STATE() {
-            return new WalkState_1.WalkState(this, this.SpawnProjectile, this.animation, this.physicsComponent, this.damageComponent, this.walkSound, this.sharedStateVariables);
-        }
-        JUMP_STATE() {
-            return new JumpState_1.JumpState(this, this.SpawnProjectile, this.jumpSound, this.landSound, this.physicsComponent, this.damageComponent, this.sharedStateVariables);
-        }
-        DASH_STATE() {
-            return new DashState_1.DashState(this, this.SpawnProjectile, this.physicsComponent, this.damageComponent, this.stompSound, this.sharedStateVariables);
-        }
-        STOMP_STATE() {
-            return new StompState_1.StompState(this, this.SpawnProjectile, this.physicsComponent, this.damageComponent, this.stompSound, this.sharedStateVariables, this.landSound);
-        }
-        DEAD_STATE() {
-            return new DeadState_2.DeadState(this, this.onDeath, this.dieSound, this.sharedStateVariables, this.animation);
-        }
-        AFTER_STOMP_STATE() {
-            return new AfterStompState_1.AfterStompState(this, this.SpawnProjectile, this.physicsComponent, this.damageComponent, this.sharedStateVariables);
-        }
-        SetAnimationFrameset(name) {
-            this.currentFrameSet = this.framesets[name];
-        }
-        // http://www.davetech.co.uk/gamedevplatformer
-        // TODO: buffer jump -- can jump if pressed jump right before landing
-        // TODO: coyote time -- can jump for little time after falling
-        // TODO: double jump
-        // TODO: longer range but much slower attack
-        get BoundingBox() {
-            if (this.StateClass !== StompState_1.StompState.name) {
-                const bbPosition = gl_matrix_20.vec3.add(gl_matrix_20.vec3.create(), this.position, this.bbOffset);
-                return new BoundingBox_5.BoundingBox(bbPosition, this.bbSize);
-            }
-            else {
-                const bbPosition = gl_matrix_20.vec3.add(gl_matrix_20.vec3.create(), this.position, gl_matrix_20.vec3.fromValues(0.75, 1.0, 0));
-                return new BoundingBox_5.BoundingBox(bbPosition, gl_matrix_20.vec2.fromValues(1.5, 2));
-            }
-        }
-        get CollectedCoins() {
-            return this.collectedCoins;
-        }
-        IncrementCollectedCoins() {
-            this.collectedCoins++;
-        }
-        get Health() {
-            return this.health;
-        }
-        set Health(value) {
-            this.health = value;
-            if (this.health < 0) {
-                this.health = 0;
-            }
-        }
-        get InputSource() {
-            return this.input;
-        }
-        TakeoverControl() {
-            const scriptInput = new InputSource_1.InputSource();
-            this.input = new ScriptControlSource_1.ScriptControlSource(scriptInput);
-            return scriptInput;
-        }
-        ReleaseControl() {
-            this.input = new PlayerControlSource_1.PlayerControlSource(this.keyHandler, this.gamepadHandler);
-        }
-        set Speed(value) {
-            this.speed = value;
-        }
-        get Speed() {
-            return this.speed;
-        }
-        get FacingDirection() {
-            return this.lastFacingDirection;
-        }
-        get Position() {
-            return this.position;
-        }
-        get CenterPosition() {
-            return gl_matrix_20.vec3.fromValues(this.position[0] + this.visualScale[0] / 2, this.position[1] + this.visualScale[1] / 2, 0);
-        }
-        get IsWalking() {
-            return gl_matrix_20.vec3.distance(this.Position, this.lastPosition) > 0.0005;
-        }
-        get StateClass() {
-            return this.internalState.constructor.name;
-        }
-        constructor(position, visualScale, collider, onDeath, SpawnProjectile, shader, bbShader, jumpSound, landSound, walkSound, stompSound, damageSound, dieSound, texture, keyHandler, gamepadHandler) {
-            this.position = position;
-            this.visualScale = visualScale;
-            this.collider = collider;
-            this.onDeath = onDeath;
-            this.SpawnProjectile = SpawnProjectile;
-            this.shader = shader;
-            this.bbShader = bbShader;
-            this.jumpSound = jumpSound;
-            this.landSound = landSound;
-            this.walkSound = walkSound;
-            this.stompSound = stompSound;
-            this.damageSound = damageSound;
-            this.dieSound = dieSound;
-            this.texture = texture;
-            this.keyHandler = keyHandler;
-            this.gamepadHandler = gamepadHandler;
-            // TODO: make bb variables parametrizable
-            this.bbOffset = gl_matrix_20.vec3.fromValues(1.2, 1.1, 0);
-            this.bbSize = gl_matrix_20.vec2.fromValues(0.8, 1.8);
-            this.invincibleFrames = 15;
-            this.sharedStateVariables = {
-                timeSinceLastDash: 500,
-                dashAvailable: true,
-                dashUsed: false,
-                timeSinceLastStomp: 500,
-                bbOffset: this.bbOffset,
-                bbSize: this.bbSize,
-                rotation: 0,
-                timeSinceLastMeleeAttack: 0,
-                timeInOverHeal: 0
-            };
-            this.health = 100;
-            this.collectedCoins = 0;
-            this.bbSprite = new Sprite_6.Sprite(Utils_5.Utils.DefaultSpriteVertices, Utils_5.Utils.DefaultSpriteTextureCoordinates);
-            this.lastPosition = gl_matrix_20.vec3.fromValues(0, 0, 1);
-            this.leftFacingAnimationFrames = [
-                gl_matrix_20.vec2.fromValues(0.0 / 12.0, 3.0 / 8.0),
-                gl_matrix_20.vec2.fromValues(1.0 / 12.0, 3.0 / 8.0),
-                gl_matrix_20.vec2.fromValues(2.0 / 12.0, 3.0 / 8.0)
-            ];
-            this.rightFacingAnimationFrames = [
-                gl_matrix_20.vec2.fromValues(0.0 / 12.0, 1.0 / 8.0),
-                gl_matrix_20.vec2.fromValues(1.0 / 12.0, 1.0 / 8.0),
-                gl_matrix_20.vec2.fromValues(2.0 / 12.0, 1.0 / 8.0)
-            ];
-            this.framesets = {
-                "left_walk": this.leftFacingAnimationFrames,
-                "right_walk": this.rightFacingAnimationFrames
-            };
-            this.currentFrameSet = this.rightFacingAnimationFrames;
-            this.DEFAULT_SPEED = 0.00025;
-            this.speed = this.DEFAULT_SPEED;
-            this.lastFacingDirection = gl_matrix_20.vec3.fromValues(1, 0, 0);
-            this.sprite = new Sprite_6.Sprite(Utils_5.Utils.DefaultSpriteVertices, 
-            // TODO: parametrize tex coords
-            Utils_5.Utils.CreateTextureCoordinates(// texture-offset is added to these coordinates, so it must be (0,0)
-            0.0 / 12.0, // These constants are hardcoded with "hero1.png" in mind
-            0.0 / 8.0, 1.0 / 12.0, 1.0 / 8.0));
-            this.input = new PlayerControlSource_1.PlayerControlSource(this.keyHandler, this.gamepadHandler);
-            this.renderer = new SpriteRenderer_2.SpriteRenderer(shader, texture, this.sprite, visualScale);
-            this.renderer.TextureOffset = this.currentFrameSet[0];
-            this.animation = new Animation_2.Animation(1 / 60 * 8 * 1000, this.renderer);
-            const flashOverlayComponent = new FlashOverlayComponent_1.FlashOverlayComponent(this.shader);
-            this.bbRenderer = new SpriteRenderer_2.SpriteRenderer(bbShader, null, this.bbSprite, this.bbSize);
-            this.bbShader.SetVec4Uniform('clr', gl_matrix_20.vec4.fromValues(1, 0, 0, 0.4));
-            this.physicsComponent = new PhysicsComponent_2.PhysicsComponent(position, this.lastPosition, () => this.BoundingBox, this.bbOffset, collider, false, false);
-            this.damageComponent = new DamageComponent_1.DamageComponent(this, flashOverlayComponent, this.damageSound, this.physicsComponent, this.invincibleFrames);
-            this.internalState = this.IDLE_STATE();
-        }
-        static async Create(position, visualScale, collider, onDeath, spawnProjectile, keyHandler, gamepadHandler) {
-            const shader = await Shader_4.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
-            const bbShader = await Shader_4.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
-            const jumpSound = await SoundEffectPool_2.SoundEffectPool.GetInstance().GetAudio('audio/jump.wav');
-            const landSound = await SoundEffectPool_2.SoundEffectPool.GetInstance().GetAudio('audio/land.wav', false);
-            const walkSound = await SoundEffectPool_2.SoundEffectPool.GetInstance().GetAudio('audio/walk1.wav', false);
-            const stompSound = await SoundEffectPool_2.SoundEffectPool.GetInstance().GetAudio('audio/hero_stomp.wav', true);
-            const damageSound = await SoundEffectPool_2.SoundEffectPool.GetInstance().GetAudio('audio/hero_damage.wav');
-            const dieSound = await SoundEffectPool_2.SoundEffectPool.GetInstance().GetAudio('audio/hero_die.wav', false);
-            const texture = await TexturePool_3.TexturePool.GetInstance().GetTexture('textures/hero1.png');
-            const hero = new Hero(position, visualScale, collider, onDeath, spawnProjectile, shader, bbShader, jumpSound, landSound, walkSound, stompSound, damageSound, dieSound, texture, keyHandler, gamepadHandler);
-            await hero.Initialize();
-            return hero;
-        }
-        Draw(proj, view) {
-            this.renderer.Draw(proj, view, this.position, this.sharedStateVariables.rotation);
-            // TODO: a megváltozott bb méret nem látszik rajzolásnál mert nem updatelem a rendererben a vertexeket csak a positiont
-            // Draw bounding box
-            if (Environment_7.Environment.RenderBoundingBoxes) {
-                this.bbRenderer.Draw(proj, view, this.BoundingBox.position, this.sharedStateVariables.rotation);
-            }
-        }
-        async Initialize() {
-            await this.internalState.Enter();
-        }
-        async Update(delta) {
-            await this.internalState.Update(delta);
-            this.animation.Animate(delta, this.currentFrameSet);
-            await this.physicsComponent.Update(delta);
-        }
-        FaceLeft() {
-            gl_matrix_20.vec3.set(this.lastFacingDirection, -1, 0, 0);
-        }
-        FaceRight() {
-            gl_matrix_20.vec3.set(this.lastFacingDirection, 1, 0, 0);
-        }
-        async DamageWithInvincibilityConsidered(pushbackForce, damage) {
-            await this.damageComponent.DamageWithInvincibilityConsidered(pushbackForce, damage);
-        }
-        async Damage(pushbackForce, damage) {
-            await this.damageComponent.Damage(pushbackForce, damage);
-        }
-        Kill() {
-            if (this.StateClass !== DeadState_2.DeadState.name) {
-                this.Health = 0;
-            }
-        }
-        async ChangeState(state) {
-            await this.internalState.Exit();
-            this.internalState = state;
-            await this.internalState.Enter();
-        }
-        Dispose() {
-            this.renderer.Dispose();
-            this.bbRenderer.Dispose();
-            this.shader.Delete();
-            this.bbShader.Delete();
-        }
-    }
-    exports.Hero = Hero;
-});
-define("LevelEnd", ["require", "exports", "Sprite", "gl-matrix", "BoundingBox", "TexturePool", "Shader", "Utils", "SoundEffectPool", "SpriteRenderer"], function (require, exports, Sprite_7, gl_matrix_21, BoundingBox_6, TexturePool_4, Shader_5, Utils_6, SoundEffectPool_3, SpriteRenderer_3) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.LevelEnd = void 0;
-    class LevelEnd {
-        constructor(position, shader, endReachedEffect, texture, interactCallback, level) {
-            this.position = position;
-            this.shader = shader;
-            this.endReachedEffect = endReachedEffect;
-            this.interactCallback = interactCallback;
-            this.level = level;
-            this.enabled = false;
-            this.size = gl_matrix_21.vec2.fromValues(2, 1);
-            this.interacted = false;
-            this.sprite = new Sprite_7.Sprite(Utils_6.Utils.DefaultSpriteVertices, Utils_6.Utils.DefaultSpriteTextureCoordinates);
-            this.renderer = new SpriteRenderer_3.SpriteRenderer(shader, texture, this.sprite, this.size);
-            this.shader.SetFloatUniform('alpha', LevelEnd.transparentValue);
-        }
-        OnEndConditionsMet() {
-            this.enabled = true;
-            this.shader.SetFloatUniform('alpha', this.enabled ? 1.0 : LevelEnd.transparentValue);
-        }
-        OnEndConditionsLost() {
-            this.enabled = false;
-            this.shader.SetFloatUniform('alpha', this.enabled ? 1.0 : LevelEnd.transparentValue);
-        }
-        get EndCondition() {
-            return false;
-        }
-        set Interacted(interacted) {
-            this.interacted = interacted;
-        }
-        async CollideWithAttack(attack) {
-            // NO-OP
-        }
-        get BoundingBox() {
-            return new BoundingBox_6.BoundingBox(this.position, gl_matrix_21.vec2.fromValues(this.size[0], this.size[1]));
-        }
-        static async Create(position, interactCallback, level) {
-            const shader = await Shader_5.Shader.Create('shaders/VertexShader.vert', 'shaders/Transparent.frag');
-            const endReachedEffect = await SoundEffectPool_3.SoundEffectPool.GetInstance().GetAudio('audio/ding.wav', false);
-            const texture = await TexturePool_4.TexturePool.GetInstance().GetTexture('textures/exit.png');
-            return new LevelEnd(position, shader, endReachedEffect, texture, interactCallback, level);
-        }
-        Draw(projection, view) {
-            this.renderer.Draw(projection, view, this.position, 0);
-        }
-        async Update(delta) {
-        }
-        IsCollidingWith(boundingBox) {
-            return boundingBox.IsCollidingWith(this.BoundingBox);
-        }
-        async Visit(hero) {
-            if (this.enabled && !this.interacted) {
-                this.level.updateDisabled = true; // pause level updates
-                await this.endReachedEffect.Play(1, 1, async () => {
-                    /**
-                     * Wait for the sound effect to play then restart level update loop.
-                    */
-                    this.interacted = true;
-                    await this.interactCallback();
-                });
-            }
-        }
-        Dispose() {
-            this.renderer.Dispose();
-            this.shader.Delete();
-        }
-    }
-    exports.LevelEnd = LevelEnd;
-    LevelEnd.transparentValue = 0.5;
-});
-define("Enemies/IEnemy", ["require", "exports", "gl-matrix", "BoundingBox", "Sprite", "Utils", "Environment", "SpriteRenderer"], function (require, exports, gl_matrix_22, BoundingBox_7, Sprite_8, Utils_7, Environment_8, SpriteRenderer_4) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.EnemyBase = void 0;
-    class EnemyBase {
-        constructor(shader, sprite, texture, bbShader, bbSize, bbOffset, position, visualScale, health) {
-            this.shader = shader;
-            this.sprite = sprite;
-            this.texture = texture;
-            this.bbShader = bbShader;
-            this.bbSize = bbSize;
-            this.bbOffset = bbOffset;
-            this.position = position;
-            this.visualScale = visualScale;
-            this.health = health;
-            this.bbSprite = new Sprite_8.Sprite(Utils_7.Utils.DefaultSpriteVertices, Utils_7.Utils.DefaultSpriteTextureCoordinates);
-            this.renderer = new SpriteRenderer_4.SpriteRenderer(shader, texture, sprite, visualScale);
-            this.bbRenderer = new SpriteRenderer_4.SpriteRenderer(bbShader, null, this.bbSprite, bbSize);
-            bbShader.SetVec4Uniform('clr', gl_matrix_22.vec4.fromValues(1, 0, 0, 0.4));
-        }
-        Draw(proj, view) {
-            this.renderer.Draw(proj, view, this.position, 0);
-            // Bounding box drawing
-            if (Environment_8.Environment.RenderBoundingBoxes) {
-                this.bbRenderer.Draw(proj, view, this.BoundingBox.position, 0);
-            }
-        }
-        get BoundingBox() {
-            return new BoundingBox_7.BoundingBox(gl_matrix_22.vec3.add(gl_matrix_22.vec3.create(), this.position, this.bbOffset), this.bbSize);
-        }
-        async CollideWithAttack(attack) {
-            await this.Damage(attack.PushbackForce, 1);
-        }
-        Dispose() {
-            this.renderer.Dispose();
-            this.bbRenderer.Dispose();
-        }
-        ;
-        get Health() {
-            return this.health;
-        }
-        set Health(health) {
-            this.health = health;
-        }
-        IsCollidingWith(boundingBox) {
-            return boundingBox.IsCollidingWith(this.BoundingBox);
-        }
-        get Position() {
-            return this.position;
-        }
-    }
-    exports.EnemyBase = EnemyBase;
-});
-define("Enemies/Dragon/States/SharedDragonStateVariables", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.SharedDragonStateVariables = void 0;
-    class SharedDragonStateVariables {
-        constructor() {
-            this.timeSinceLastCharge = 9999;
-            this.timeSinceLastAttack = 0;
-            this.timeSinceLastFireBall = 0;
-        }
-    }
-    exports.SharedDragonStateVariables = SharedDragonStateVariables;
-});
-define("Projectiles/BiteProjectile", ["require", "exports", "gl-matrix", "Shader", "Sprite", "TexturePool", "Utils", "SoundEffectPool", "Projectiles/ProjectileBase", "Components/Animation", "ICollider"], function (require, exports, gl_matrix_23, Shader_6, Sprite_9, TexturePool_5, Utils_8, SoundEffectPool_4, ProjectileBase_2, Animation_3, ICollider_2) {
+define("Projectiles/BiteProjectile", ["require", "exports", "gl-matrix", "Shader", "Sprite", "TexturePool", "Utils", "SoundEffectPool", "Projectiles/ProjectileBase", "Components/Animation", "ICollider"], function (require, exports, gl_matrix_15, Shader_4, Sprite_7, TexturePool_3, Utils_6, SoundEffectPool_2, ProjectileBase_1, Animation_1, ICollider_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.BiteProjectile = void 0;
     /**
      * A stationary projectile that attacks the player
      */
-    class BiteProjectile extends ProjectileBase_2.ProjectileBase {
+    class BiteProjectile extends ProjectileBase_1.ProjectileBase {
         constructor(position, facingDirection, shader, bbShader, biteDamageSound, texture) {
-            const sprite = new Sprite_9.Sprite(Utils_8.Utils.DefaultSpriteVertices, Utils_8.Utils.CreateTextureCoordinates(0 / 5, 0 / 2, 1 / 5, 1 / 2));
-            const bbSize = gl_matrix_23.vec2.fromValues(2.0, 2.0);
-            const spriteVisualScale = gl_matrix_23.vec2.fromValues(5, 5);
+            const sprite = new Sprite_7.Sprite(Utils_6.Utils.DefaultSpriteVertices, Utils_6.Utils.CreateTextureCoordinates(0 / 5, 0 / 2, 1 / 5, 1 / 2));
+            const bbSize = gl_matrix_15.vec2.fromValues(2.0, 2.0);
+            const spriteVisualScale = gl_matrix_15.vec2.fromValues(5, 5);
             const bbOffset = facingDirection[0] > 0 ?
-                gl_matrix_23.vec3.fromValues(spriteVisualScale[0] - bbSize[0] - 1.25, 1.25, 0) : // left box
-                gl_matrix_23.vec3.fromValues(1.25, 1.25, 0); // right box
+                gl_matrix_15.vec3.fromValues(spriteVisualScale[0] - bbSize[0] - 1.25, 1.25, 0) : // left box
+                gl_matrix_15.vec3.fromValues(1.25, 1.25, 0); // right box
             const animationMustComplete = true;
-            super(shader, texture, sprite, position, spriteVisualScale, bbOffset, bbSize, null, animationMustComplete, new ICollider_2.NullCollider(), bbShader);
+            super(shader, texture, sprite, position, spriteVisualScale, bbOffset, bbSize, null, animationMustComplete, new ICollider_1.NullCollider(), bbShader);
             this.facingDirection = facingDirection;
             this.biteDamageSound = biteDamageSound;
             // TODO: flip texture, to achieve left and right facing bite attack
             this.currentFrameSet = [
-                gl_matrix_23.vec2.fromValues(0 / 5, 0 / 2),
-                gl_matrix_23.vec2.fromValues(1 / 5, 0 / 2),
-                gl_matrix_23.vec2.fromValues(0 / 5, 1 / 2),
-                gl_matrix_23.vec2.fromValues(1 / 5, 1 / 2),
+                gl_matrix_15.vec2.fromValues(0 / 5, 0 / 2),
+                gl_matrix_15.vec2.fromValues(1 / 5, 0 / 2),
+                gl_matrix_15.vec2.fromValues(0 / 5, 1 / 2),
+                gl_matrix_15.vec2.fromValues(1 / 5, 1 / 2),
             ];
-            this.animation = new Animation_3.Animation(64, this.renderer);
+            this.animation = new Animation_1.Animation(64, this.renderer);
         }
         static async Create(position, facingDirection) {
-            const shader = await Shader_6.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
-            const bbShader = await Shader_6.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
-            const biteDamageSound = await SoundEffectPool_4.SoundEffectPool.GetInstance().GetAudio('audio/bite.wav');
-            const texture = await TexturePool_5.TexturePool.GetInstance().GetTexture('textures/fang.png');
+            const shader = await Shader_4.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
+            const bbShader = await Shader_4.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
+            const biteDamageSound = await SoundEffectPool_2.SoundEffectPool.GetInstance().GetAudio('audio/bite.wav');
+            const texture = await TexturePool_3.TexturePool.GetInstance().GetTexture('textures/fang.png');
             return new BiteProjectile(position, facingDirection, shader, bbShader, biteDamageSound, texture);
         }
         async OnHit() {
@@ -2586,7 +1831,7 @@ define("Projectiles/BiteProjectile", ["require", "exports", "gl-matrix", "Shader
             this.alreadyHit = true;
         }
         get PushbackForce() {
-            const damagePushback = gl_matrix_23.vec3.scale(gl_matrix_23.vec3.create(), this.facingDirection, -0.01);
+            const damagePushback = gl_matrix_15.vec3.scale(gl_matrix_15.vec3.create(), this.facingDirection, -0.01);
             damagePushback[1] -= 0.01;
             return damagePushback;
         }
@@ -2608,7 +1853,7 @@ define("Projectiles/BiteProjectile", ["require", "exports", "gl-matrix", "Shader
     }
     exports.BiteProjectile = BiteProjectile;
 });
-define("Enemies/Dragon/States/DragonStateBase", ["require", "exports", "gl-matrix"], function (require, exports, gl_matrix_24) {
+define("Enemies/Dragon/States/DragonStateBase", ["require", "exports", "gl-matrix"], function (require, exports, gl_matrix_16) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.DragonStateBase = void 0;
@@ -2625,19 +1870,19 @@ define("Enemies/Dragon/States/DragonStateBase", ["require", "exports", "gl-matri
             // Reduce shaking by only moving when the distance is larger than a limit
             const distance = Math.abs(this.hero.CenterPosition[1] - this.dragon.CenterPosition[1]);
             if (distance > 0.2) {
-                const dir = gl_matrix_24.vec3.sub(gl_matrix_24.vec3.create(), this.dragon.CenterPosition, this.hero.CenterPosition);
+                const dir = gl_matrix_16.vec3.sub(gl_matrix_16.vec3.create(), this.dragon.CenterPosition, this.hero.CenterPosition);
                 if (dir[1] > 0) {
-                    this.dragon.Move(gl_matrix_24.vec3.fromValues(0, -0.00004, 0), delta);
+                    this.dragon.Move(gl_matrix_16.vec3.fromValues(0, -0.00004, 0), delta);
                 }
                 else if (dir[1] < 0) {
-                    this.dragon.Move(gl_matrix_24.vec3.fromValues(0, 0.00004, 0), delta);
+                    this.dragon.Move(gl_matrix_16.vec3.fromValues(0, 0.00004, 0), delta);
                 }
             }
         }
     }
     exports.DragonStateBase = DragonStateBase;
 });
-define("Enemies/Dragon/States/IdleState", ["require", "exports", "gl-matrix", "Projectiles/BiteProjectile", "Enemies/Dragon/States/DragonStateBase"], function (require, exports, gl_matrix_25, BiteProjectile_1, DragonStateBase_1) {
+define("Enemies/Dragon/States/IdleState", ["require", "exports", "gl-matrix", "Projectiles/BiteProjectile", "Enemies/Dragon/States/DragonStateBase"], function (require, exports, gl_matrix_17, BiteProjectile_1, DragonStateBase_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.IdleState = void 0;
@@ -2656,7 +1901,7 @@ define("Enemies/Dragon/States/IdleState", ["require", "exports", "gl-matrix", "P
             this.shared = shared;
         }
         async Update(delta) {
-            const distance = gl_matrix_25.vec3.distance(this.dragon.CenterPosition, this.hero.CenterPosition);
+            const distance = gl_matrix_17.vec3.distance(this.dragon.CenterPosition, this.hero.CenterPosition);
             // Bite when the hero is near
             if (this.shared.timeSinceLastAttack > 2000) {
                 this.shared.timeSinceLastAttack = 0;
@@ -2717,7 +1962,7 @@ define("Enemies/Dragon/States/RushStates/StartState", ["require", "exports", "En
     }
     exports.StartState = StartState;
 });
-define("Enemies/Dragon/States/RushStates/BackingState", ["require", "exports", "gl-matrix", "Enemies/Dragon/States/DragonStateBase"], function (require, exports, gl_matrix_26, DragonStateBase_3) {
+define("Enemies/Dragon/States/RushStates/BackingState", ["require", "exports", "gl-matrix", "Enemies/Dragon/States/DragonStateBase"], function (require, exports, gl_matrix_18, DragonStateBase_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.BackingState = void 0;
@@ -2730,15 +1975,15 @@ define("Enemies/Dragon/States/RushStates/BackingState", ["require", "exports", "
         }
         async Update(delta) {
             this.timeInBacking += delta;
-            const dir = gl_matrix_26.vec3.sub(gl_matrix_26.vec3.create(), this.dragon.CenterPosition, this.hero.CenterPosition);
+            const dir = gl_matrix_18.vec3.sub(gl_matrix_18.vec3.create(), this.dragon.CenterPosition, this.hero.CenterPosition);
             if (dir[0] > 0) {
-                this.dragon.Move(gl_matrix_26.vec3.fromValues(0.000475, 0, 0), delta);
+                this.dragon.Move(gl_matrix_18.vec3.fromValues(0.000475, 0, 0), delta);
             }
             else if (dir[0] < 0) {
-                this.dragon.Move(gl_matrix_26.vec3.fromValues(-0.000475, 0, 0), delta);
+                this.dragon.Move(gl_matrix_18.vec3.fromValues(-0.000475, 0, 0), delta);
             }
             if (this.timeInBacking > 1500 ||
-                (gl_matrix_26.vec3.distance(this.dragon.CenterPosition, this.hero.CenterPosition) > 15 &&
+                (gl_matrix_18.vec3.distance(this.dragon.CenterPosition, this.hero.CenterPosition) > 15 &&
                     this.timeInBacking > 500)) {
                 this.timeInBacking = 0;
                 await this.context.ChangeState(this.context.CHARGE_STATE());
@@ -2756,7 +2001,7 @@ define("Enemies/Dragon/States/RushStates/BackingState", ["require", "exports", "
     }
     exports.BackingState = BackingState;
 });
-define("Enemies/Dragon/States/RushStates/ChargeState", ["require", "exports", "gl-matrix", "Enemies/Dragon/States/DragonStateBase"], function (require, exports, gl_matrix_27, DragonStateBase_4) {
+define("Enemies/Dragon/States/RushStates/ChargeState", ["require", "exports", "gl-matrix", "Enemies/Dragon/States/DragonStateBase"], function (require, exports, gl_matrix_19, DragonStateBase_4) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.ChargeState = void 0;
@@ -2770,12 +2015,12 @@ define("Enemies/Dragon/States/RushStates/ChargeState", ["require", "exports", "g
         async Update(delta) {
             this.shared.timeSinceLastAttack = 0;
             this.shared.timeSinceLastCharge = 0;
-            const dir = gl_matrix_27.vec3.sub(gl_matrix_27.vec3.create(), this.dragon.CenterPosition, this.hero.CenterPosition);
+            const dir = gl_matrix_19.vec3.sub(gl_matrix_19.vec3.create(), this.dragon.CenterPosition, this.hero.CenterPosition);
             if (dir[0] > 0) {
-                this.dragon.Move(gl_matrix_27.vec3.fromValues(-0.0002, 0, 0), delta);
+                this.dragon.Move(gl_matrix_19.vec3.fromValues(-0.0002, 0, 0), delta);
             }
             else if (dir[0] < 0) {
-                this.dragon.Move(gl_matrix_27.vec3.fromValues(0.0002, 0, 0), delta);
+                this.dragon.Move(gl_matrix_19.vec3.fromValues(0.0002, 0, 0), delta);
             }
             // Move out of charge state when distance on the Y axis is close enough
             const distanceOnX = Math.abs(this.dragon.CenterPosition[0] - this.hero.CenterPosition[0]);
@@ -2820,7 +2065,7 @@ define("Enemies/Dragon/States/RushStates/PreAttackState", ["require", "exports",
     }
     exports.PreAttackState = PreAttackState;
 });
-define("Enemies/Dragon/States/RushStates/AttackState", ["require", "exports", "gl-matrix", "Projectiles/BiteProjectile", "Enemies/Dragon/States/DragonStateBase"], function (require, exports, gl_matrix_28, BiteProjectile_2, DragonStateBase_6) {
+define("Enemies/Dragon/States/RushStates/AttackState", ["require", "exports", "gl-matrix", "Projectiles/BiteProjectile", "Enemies/Dragon/States/DragonStateBase"], function (require, exports, gl_matrix_20, BiteProjectile_2, DragonStateBase_6) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.AttackState = void 0;
@@ -2837,7 +2082,7 @@ define("Enemies/Dragon/States/RushStates/AttackState", ["require", "exports", "g
             // This is handled differently from the normal attack, when the hero remains close
             this.dragon.ResetVelocity();
             const projectilePosition = this.dragon.BiteProjectilePosition;
-            const bite = await BiteProjectile_2.BiteProjectile.Create(projectilePosition, gl_matrix_28.vec3.clone(this.dragon.FacingDirection));
+            const bite = await BiteProjectile_2.BiteProjectile.Create(projectilePosition, gl_matrix_20.vec3.clone(this.dragon.FacingDirection));
             await this.biteAttackSound.Play();
             this.spawnProjectile(this.dragon, bite);
             await this.dragon.ChangeState(this.dragon.IDLE_STATE());
@@ -2889,7 +2134,7 @@ define("Enemies/Dragon/States/RushStates/RushState", ["require", "exports", "Ene
     }
     exports.RushState = RushState;
 });
-define("Enemies/Dragon/States/FlyAttackStates/ReachAltitudeState", ["require", "exports", "gl-matrix"], function (require, exports, gl_matrix_29) {
+define("Enemies/Dragon/States/FlyAttackStates/ReachAltitudeState", ["require", "exports", "gl-matrix"], function (require, exports, gl_matrix_21) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.ReachAltitudeState = void 0;
@@ -2903,7 +2148,7 @@ define("Enemies/Dragon/States/FlyAttackStates/ReachAltitudeState", ["require", "
             const destinationHeight = 6;
             const verticalDistance = destinationHeight - this.dragon.CenterPosition[1];
             if (verticalDistance < -0.01) {
-                this.dragon.Move(gl_matrix_29.vec3.fromValues(0, -0.0001, 0), delta);
+                this.dragon.Move(gl_matrix_21.vec3.fromValues(0, -0.0001, 0), delta);
             }
             else {
                 await this.context.ChangeState(this.context.SWEEPING_STATE());
@@ -2916,33 +2161,33 @@ define("Enemies/Dragon/States/FlyAttackStates/ReachAltitudeState", ["require", "
     }
     exports.ReachAltitudeState = ReachAltitudeState;
 });
-define("Projectiles/Firebomb", ["require", "exports", "gl-matrix", "Projectiles/ProjectileBase", "Shader", "SoundEffectPool", "TexturePool", "Sprite", "Utils"], function (require, exports, gl_matrix_30, ProjectileBase_3, Shader_7, SoundEffectPool_5, TexturePool_6, Sprite_10, Utils_9) {
+define("Projectiles/Firebomb", ["require", "exports", "gl-matrix", "Projectiles/ProjectileBase", "Shader", "SoundEffectPool", "TexturePool", "Sprite", "Utils"], function (require, exports, gl_matrix_22, ProjectileBase_2, Shader_5, SoundEffectPool_3, TexturePool_4, Sprite_8, Utils_7) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Firebomb = void 0;
-    class Firebomb extends ProjectileBase_3.ProjectileBase {
+    class Firebomb extends ProjectileBase_2.ProjectileBase {
         constructor(shader, texture, position, bbShader, hitSound, spawnSound, despawnSound, collider) {
-            const sprite = new Sprite_10.Sprite(Utils_9.Utils.DefaultSpriteVertices, Utils_9.Utils.DefaultSpriteTextureCoordinates);
-            const visualScale = gl_matrix_30.vec2.fromValues(0.85, 0.85);
-            const bbOffset = gl_matrix_30.vec3.fromValues(0, 0, 0);
-            const bbSize = gl_matrix_30.vec2.fromValues(0.85, 0.85);
+            const sprite = new Sprite_8.Sprite(Utils_7.Utils.DefaultSpriteVertices, Utils_7.Utils.DefaultSpriteTextureCoordinates);
+            const visualScale = gl_matrix_22.vec2.fromValues(0.85, 0.85);
+            const bbOffset = gl_matrix_22.vec3.fromValues(0, 0, 0);
+            const bbSize = gl_matrix_22.vec2.fromValues(0.85, 0.85);
             super(shader, texture, sprite, position, visualScale, bbOffset, bbSize, hitSound, false, collider, bbShader);
             this.spawnSound = spawnSound;
             this.despawnSound = despawnSound;
-            this.moveDirection = gl_matrix_30.vec3.scale(gl_matrix_30.vec3.create(), gl_matrix_30.vec3.fromValues(0, 1, 0), 0.0001);
+            this.moveDirection = gl_matrix_22.vec3.scale(gl_matrix_22.vec3.create(), gl_matrix_22.vec3.fromValues(0, 1, 0), 0.0001);
             this.spawnSoundPlayed = false;
         }
         static async Create(position, collider) {
-            const shader = await Shader_7.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
-            const bbShader = await Shader_7.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
-            const hitSound = await SoundEffectPool_5.SoundEffectPool.GetInstance().GetAudio('audio/hero_stomp.wav');
-            const spawnSound = await SoundEffectPool_5.SoundEffectPool.GetInstance().GetAudio('audio/fireball_spawn.mp3');
-            const despawnSound = await SoundEffectPool_5.SoundEffectPool.GetInstance().GetAudio('audio/enemy_damage.wav');
-            const texture = await TexturePool_6.TexturePool.GetInstance().GetTexture('textures/firebomb.png');
+            const shader = await Shader_5.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
+            const bbShader = await Shader_5.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
+            const hitSound = await SoundEffectPool_3.SoundEffectPool.GetInstance().GetAudio('audio/hero_stomp.wav');
+            const spawnSound = await SoundEffectPool_3.SoundEffectPool.GetInstance().GetAudio('audio/fireball_spawn.mp3');
+            const despawnSound = await SoundEffectPool_3.SoundEffectPool.GetInstance().GetAudio('audio/enemy_damage.wav');
+            const texture = await TexturePool_4.TexturePool.GetInstance().GetTexture('textures/firebomb.png');
             return new Firebomb(shader, texture, position, bbShader, hitSound, spawnSound, despawnSound, collider);
         }
         get PushbackForce() {
-            return gl_matrix_30.vec3.create();
+            return gl_matrix_22.vec3.create();
         }
         ;
         async Update(delta) {
@@ -2970,7 +2215,7 @@ define("Projectiles/Firebomb", ["require", "exports", "gl-matrix", "Projectiles/
     }
     exports.Firebomb = Firebomb;
 });
-define("Enemies/Dragon/States/FlyAttackStates/SweepingState", ["require", "exports", "gl-matrix", "Projectiles/Firebomb"], function (require, exports, gl_matrix_31, Firebomb_1) {
+define("Enemies/Dragon/States/FlyAttackStates/SweepingState", ["require", "exports", "gl-matrix", "Projectiles/Firebomb"], function (require, exports, gl_matrix_23, Firebomb_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.SweepingState = void 0;
@@ -2981,14 +2226,14 @@ define("Enemies/Dragon/States/FlyAttackStates/SweepingState", ["require", "expor
             this.spawnProjectile = spawnProjectile;
             this.collider = collider;
             this.shared = shared;
-            this.dir = gl_matrix_31.vec3.fromValues(-0.00010, 0, 0);
+            this.dir = gl_matrix_23.vec3.fromValues(-0.00010, 0, 0);
         }
         async Update(delta) {
             // left-right movement
             // change direction on collision
             if (this.dragon.WillCollide(this.dir, delta)) {
                 this.dragon.ResetVelocity();
-                this.dir = gl_matrix_31.vec3.fromValues(this.dir[0] * -1, 0, 0);
+                this.dir = gl_matrix_23.vec3.fromValues(this.dir[0] * -1, 0, 0);
             }
             this.dragon.Move(this.dir, delta);
             // spit fireballs while sweeping
@@ -3010,13 +2255,13 @@ define("Enemies/Dragon/States/FlyAttackStates/SweepingState", ["require", "expor
     }
     exports.SweepingState = SweepingState;
 });
-define("Enemies/Dragon/States/FlyAttackStates/SharedFlyAttackVariables", ["require", "exports", "gl-matrix"], function (require, exports, gl_matrix_32) {
+define("Enemies/Dragon/States/FlyAttackStates/SharedFlyAttackVariables", ["require", "exports", "gl-matrix"], function (require, exports, gl_matrix_24) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.SharedFlyAttackVariables = void 0;
     class SharedFlyAttackVariables {
         constructor() {
-            this.savedHeroPosition = gl_matrix_32.vec3.create();
+            this.savedHeroPosition = gl_matrix_24.vec3.create();
         }
     }
     exports.SharedFlyAttackVariables = SharedFlyAttackVariables;
@@ -3057,7 +2302,7 @@ define("Enemies/Dragon/States/FlyAttackStates/PreFlyAttackState", ["require", "e
     }
     exports.PreFlyAttackState = PreFlyAttackState;
 });
-define("Enemies/Dragon/States/FlyAttackStates/AttackState", ["require", "exports", "gl-matrix"], function (require, exports, gl_matrix_33) {
+define("Enemies/Dragon/States/FlyAttackStates/AttackState", ["require", "exports", "gl-matrix"], function (require, exports, gl_matrix_25) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.AttackState = void 0;
@@ -3071,12 +2316,12 @@ define("Enemies/Dragon/States/FlyAttackStates/AttackState", ["require", "exports
             // Diagonal attack from above
             // The attack/bite itself is handled by the idle state
             // Move the dragon based on the position of the bite attack
-            const attackDirection = gl_matrix_33.vec3.sub(gl_matrix_33.vec3.create(), this.shared.savedHeroPosition, this.dragon.BiteProjectilePosition);
+            const attackDirection = gl_matrix_25.vec3.sub(gl_matrix_25.vec3.create(), this.shared.savedHeroPosition, this.dragon.BiteProjectilePosition);
             attackDirection[2] = 0;
-            gl_matrix_33.vec3.normalize(attackDirection, attackDirection);
-            gl_matrix_33.vec3.scale(attackDirection, attackDirection, 0.0003); // hard coded attack speed
+            gl_matrix_25.vec3.normalize(attackDirection, attackDirection);
+            gl_matrix_25.vec3.scale(attackDirection, attackDirection, 0.0003); // hard coded attack speed
             this.dragon.Move(attackDirection, delta);
-            const distanceToRushPosition = gl_matrix_33.vec3.distance(this.shared.savedHeroPosition, this.dragon.CenterPosition);
+            const distanceToRushPosition = gl_matrix_25.vec3.distance(this.shared.savedHeroPosition, this.dragon.CenterPosition);
             if (distanceToRushPosition < 2.0 || this.dragon.WillCollide(attackDirection, delta)) {
                 await this.dragon.ChangeState(this.dragon.IDLE_STATE());
                 return;
@@ -3089,11 +2334,11 @@ define("Enemies/Dragon/States/FlyAttackStates/AttackState", ["require", "exports
     }
     exports.AttackState = AttackState;
 });
-define("Enemies/Dragon/States/FlyAttackStates/FlyAttackState", ["require", "exports", "Enemies/Dragon/States/DragonStateBase", "gl-matrix", "Enemies/Dragon/States/FlyAttackStates/ReachAltitudeState", "Enemies/Dragon/States/FlyAttackStates/SweepingState", "Enemies/Dragon/States/FlyAttackStates/PreFlyAttackState", "Enemies/Dragon/States/FlyAttackStates/AttackState"], function (require, exports, DragonStateBase_8, gl_matrix_34, ReachAltitudeState_1, SweepingState_1, PreFlyAttackState_1, AttackState_2) {
+define("Enemies/Dragon/States/FlyAttackStates/FlyAttackState", ["require", "exports", "Enemies/Dragon/States/DragonStateBase", "gl-matrix", "Enemies/Dragon/States/FlyAttackStates/ReachAltitudeState", "Enemies/Dragon/States/FlyAttackStates/SweepingState", "Enemies/Dragon/States/FlyAttackStates/PreFlyAttackState", "Enemies/Dragon/States/FlyAttackStates/AttackState"], function (require, exports, DragonStateBase_8, gl_matrix_26, ReachAltitudeState_1, SweepingState_1, PreFlyAttackState_1, AttackState_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.FlyAttackState = void 0;
-    // TODO: 125 TODOs in 12/01 on boss_event branch - 77 TODOs on master as of 01/01 - 35 todos on component branch on 07/10
+    // TODO: 125 TODOs in 12/01 on boss_event branch - 77 TODOs on master as of 01/01 - 31 todos on master branch on 07/11
     class FlyAttackState extends DragonStateBase_8.DragonStateBase {
         REACH_ALTITUDE_STATE() {
             return new ReachAltitudeState_1.ReachAltitudeState(this, this.dragon);
@@ -3120,7 +2365,7 @@ define("Enemies/Dragon/States/FlyAttackStates/FlyAttackState", ["require", "expo
             this.shared = shared;
             this.internalState = this.REACH_ALTITUDE_STATE();
             this.sharedFlyAttackVariables = {
-                savedHeroPosition: gl_matrix_34.vec3.create()
+                savedHeroPosition: gl_matrix_26.vec3.create()
             };
             this.sharedFlyAttackVariables.savedHeroPosition = hero.CenterPosition;
             this.savedHeroPosition = hero.CenterPosition;
@@ -3135,7 +2380,7 @@ define("Enemies/Dragon/States/FlyAttackStates/FlyAttackState", ["require", "expo
     }
     exports.FlyAttackState = FlyAttackState;
 });
-define("Enemies/Dragon/States/EnterArenaState", ["require", "exports", "Enemies/Dragon/States/DragonStateBase", "gl-matrix"], function (require, exports, DragonStateBase_9, gl_matrix_35) {
+define("Enemies/Dragon/States/EnterArenaState", ["require", "exports", "Enemies/Dragon/States/DragonStateBase", "gl-matrix"], function (require, exports, DragonStateBase_9, gl_matrix_27) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.EnterArenaState = void 0;
@@ -3157,7 +2402,7 @@ define("Enemies/Dragon/States/EnterArenaState", ["require", "exports", "Enemies/
             }
             // Move to the predefined coordinates
             if (this.dragon.CenterPosition[0] > this.enterWaypoint[0]) {
-                const dir = gl_matrix_35.vec3.fromValues(-0.00015, 0, 0);
+                const dir = gl_matrix_27.vec3.fromValues(-0.00015, 0, 0);
                 this.dragon.Move(dir, delta);
             }
             else {
@@ -3175,59 +2420,59 @@ define("Enemies/Dragon/States/EnterArenaState", ["require", "exports", "Enemies/
     }
     exports.EnterArenaState = EnterArenaState;
 });
-define("Projectiles/Fireball", ["require", "exports", "gl-matrix", "Shader", "Sprite", "TexturePool", "Utils", "SoundEffectPool", "Projectiles/ProjectileBase", "Components/Animation"], function (require, exports, gl_matrix_36, Shader_8, Sprite_11, TexturePool_7, Utils_10, SoundEffectPool_6, ProjectileBase_4, Animation_4) {
+define("Projectiles/Fireball", ["require", "exports", "gl-matrix", "Shader", "Sprite", "TexturePool", "Utils", "SoundEffectPool", "Projectiles/ProjectileBase", "Components/Animation"], function (require, exports, gl_matrix_28, Shader_6, Sprite_9, TexturePool_5, Utils_8, SoundEffectPool_4, ProjectileBase_3, Animation_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Fireball = void 0;
-    class Fireball extends ProjectileBase_4.ProjectileBase {
+    class Fireball extends ProjectileBase_3.ProjectileBase {
         constructor(position, facingDirection, moveSpeed, collider, shader, bbShader, hitSound, spawnSound, despawnSound, texture) {
-            const bbSize = gl_matrix_36.vec2.fromValues(2.0, 1.0);
-            const visualScale = gl_matrix_36.vec2.fromValues(3, 3);
+            const bbSize = gl_matrix_28.vec2.fromValues(2.0, 1.0);
+            const visualScale = gl_matrix_28.vec2.fromValues(3, 3);
             const bbOffset = facingDirection[0] > 0 ?
-                gl_matrix_36.vec3.fromValues(0, 1, 0) :
-                gl_matrix_36.vec3.fromValues(1, 1, 0);
-            const sprite = new Sprite_11.Sprite(Utils_10.Utils.DefaultSpriteVertices, Utils_10.Utils.CreateTextureCoordinates(0, 0, 1 / 8, 1 / 8));
+                gl_matrix_28.vec3.fromValues(0, 1, 0) :
+                gl_matrix_28.vec3.fromValues(1, 1, 0);
+            const sprite = new Sprite_9.Sprite(Utils_8.Utils.DefaultSpriteVertices, Utils_8.Utils.CreateTextureCoordinates(0, 0, 1 / 8, 1 / 8));
             super(shader, texture, sprite, position, visualScale, bbOffset, bbSize, hitSound, false, collider, bbShader);
             this.moveSpeed = moveSpeed;
             this.spawnSound = spawnSound;
             this.despawnSound = despawnSound;
             this.spawnSoundPlayed = false;
             this.leftFacingAnimationFrames = [
-                gl_matrix_36.vec2.fromValues(0 / 8, 0 / 8),
-                gl_matrix_36.vec2.fromValues(1 / 8, 0 / 8),
-                gl_matrix_36.vec2.fromValues(2 / 8, 0 / 8),
-                gl_matrix_36.vec2.fromValues(3 / 8, 0 / 8),
-                gl_matrix_36.vec2.fromValues(4 / 8, 0 / 8),
-                gl_matrix_36.vec2.fromValues(5 / 8, 0 / 8),
-                gl_matrix_36.vec2.fromValues(6 / 8, 0 / 8),
-                gl_matrix_36.vec2.fromValues(7 / 8, 0 / 8),
+                gl_matrix_28.vec2.fromValues(0 / 8, 0 / 8),
+                gl_matrix_28.vec2.fromValues(1 / 8, 0 / 8),
+                gl_matrix_28.vec2.fromValues(2 / 8, 0 / 8),
+                gl_matrix_28.vec2.fromValues(3 / 8, 0 / 8),
+                gl_matrix_28.vec2.fromValues(4 / 8, 0 / 8),
+                gl_matrix_28.vec2.fromValues(5 / 8, 0 / 8),
+                gl_matrix_28.vec2.fromValues(6 / 8, 0 / 8),
+                gl_matrix_28.vec2.fromValues(7 / 8, 0 / 8),
             ];
             this.rightFacingAnimationFrames = [
-                gl_matrix_36.vec2.fromValues(0 / 8, 4 / 8),
-                gl_matrix_36.vec2.fromValues(1 / 8, 4 / 8),
-                gl_matrix_36.vec2.fromValues(2 / 8, 4 / 8),
-                gl_matrix_36.vec2.fromValues(3 / 8, 4 / 8),
-                gl_matrix_36.vec2.fromValues(4 / 8, 4 / 8),
-                gl_matrix_36.vec2.fromValues(5 / 8, 4 / 8),
-                gl_matrix_36.vec2.fromValues(6 / 8, 4 / 8),
-                gl_matrix_36.vec2.fromValues(7 / 8, 4 / 8),
+                gl_matrix_28.vec2.fromValues(0 / 8, 4 / 8),
+                gl_matrix_28.vec2.fromValues(1 / 8, 4 / 8),
+                gl_matrix_28.vec2.fromValues(2 / 8, 4 / 8),
+                gl_matrix_28.vec2.fromValues(3 / 8, 4 / 8),
+                gl_matrix_28.vec2.fromValues(4 / 8, 4 / 8),
+                gl_matrix_28.vec2.fromValues(5 / 8, 4 / 8),
+                gl_matrix_28.vec2.fromValues(6 / 8, 4 / 8),
+                gl_matrix_28.vec2.fromValues(7 / 8, 4 / 8),
             ];
             this.currentFrameSet = this.leftFacingAnimationFrames;
-            this.animation = new Animation_4.Animation(1 / 30 * 1000, this.renderer);
-            shader.SetVec4Uniform('clr', gl_matrix_36.vec4.fromValues(0, 1, 0, 0.4));
+            this.animation = new Animation_2.Animation(1 / 30 * 1000, this.renderer);
+            shader.SetVec4Uniform('clr', gl_matrix_28.vec4.fromValues(0, 1, 0, 0.4));
         }
         static async Create(position, facingDir, moveSpeed, collider) {
-            const shader = await Shader_8.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
-            const bbShader = await Shader_8.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
-            const hitSound = await SoundEffectPool_6.SoundEffectPool.GetInstance().GetAudio('audio/hero_stomp.wav');
-            const despawnSound = await SoundEffectPool_6.SoundEffectPool.GetInstance().GetAudio('audio/enemy_damage.wav');
-            const spawnSound = await SoundEffectPool_6.SoundEffectPool.GetInstance().GetAudio('audio/fireball_spawn.mp3');
-            const texture = await TexturePool_7.TexturePool.GetInstance().GetTexture('textures/fireball.png');
+            const shader = await Shader_6.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
+            const bbShader = await Shader_6.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
+            const hitSound = await SoundEffectPool_4.SoundEffectPool.GetInstance().GetAudio('audio/hero_stomp.wav');
+            const despawnSound = await SoundEffectPool_4.SoundEffectPool.GetInstance().GetAudio('audio/enemy_damage.wav');
+            const spawnSound = await SoundEffectPool_4.SoundEffectPool.GetInstance().GetAudio('audio/fireball_spawn.mp3');
+            const texture = await TexturePool_5.TexturePool.GetInstance().GetTexture('textures/fireball.png');
             return new Fireball(position, facingDir, moveSpeed, collider, shader, bbShader, hitSound, spawnSound, despawnSound, texture);
         }
         get PushbackForce() {
             // No pushback from a fireball
-            return gl_matrix_36.vec3.create();
+            return gl_matrix_28.vec3.create();
         }
         Dispose() {
             super.Dispose();
@@ -3258,7 +2503,7 @@ define("Projectiles/Fireball", ["require", "exports", "gl-matrix", "Shader", "Sp
     }
     exports.Fireball = Fireball;
 });
-define("Enemies/Dragon/States/GroundAttackStates/SweepingState", ["require", "exports", "gl-matrix", "Projectiles/Fireball"], function (require, exports, gl_matrix_37, Fireball_1) {
+define("Enemies/Dragon/States/GroundAttackStates/SweepingState", ["require", "exports", "gl-matrix", "Projectiles/Fireball"], function (require, exports, gl_matrix_29, Fireball_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.SweepingState = void 0;
@@ -3275,7 +2520,7 @@ define("Enemies/Dragon/States/GroundAttackStates/SweepingState", ["require", "ex
         }
         async Update(delta) {
             // In sweeping state the dragon can spit a fireball
-            const distance = gl_matrix_37.vec3.distance(this.hero.CenterPosition, this.dragon.CenterPosition);
+            const distance = gl_matrix_29.vec3.distance(this.hero.CenterPosition, this.dragon.CenterPosition);
             if (this.shared.timeSinceLastFireBall > 1500) {
                 // spit fireball
                 if (distance < 30 && distance > 5) {
@@ -3291,7 +2536,7 @@ define("Enemies/Dragon/States/GroundAttackStates/SweepingState", ["require", "ex
                 if (this.timeSignalingFireballAttack > 10 / 60 * 1000) {
                     // In ground attack the dragon spits the fireball on the x-axis only
                     const position = this.dragon.FireBallProjectileSpawnPosition;
-                    const fireball = await Fireball_1.Fireball.Create(position, this.dragon.FacingDirection, gl_matrix_37.vec3.scale(gl_matrix_37.vec3.create(), this.dragon.FacingDirection, -0.00015), this.collider);
+                    const fireball = await Fireball_1.Fireball.Create(position, this.dragon.FacingDirection, gl_matrix_29.vec3.scale(gl_matrix_29.vec3.create(), this.dragon.FacingDirection, -0.00015), this.collider);
                     this.spawnProjectile(this.dragon, fireball);
                     this.timeSignalingFireballAttack = 0;
                     this.signalingFireball = false;
@@ -3335,7 +2580,7 @@ define("Enemies/Dragon/States/GroundAttackStates/AttackState", ["require", "expo
     }
     exports.AttackState = AttackState;
 });
-define("Enemies/Dragon/States/GroundAttackStates/GroundAttackState", ["require", "exports", "Enemies/Dragon/States/DragonStateBase", "gl-matrix", "Enemies/Dragon/States/GroundAttackStates/SweepingState", "Enemies/Dragon/States/GroundAttackStates/AttackState"], function (require, exports, DragonStateBase_10, gl_matrix_38, SweepingState_2, AttackState_3) {
+define("Enemies/Dragon/States/GroundAttackStates/GroundAttackState", ["require", "exports", "Enemies/Dragon/States/DragonStateBase", "gl-matrix", "Enemies/Dragon/States/GroundAttackStates/SweepingState", "Enemies/Dragon/States/GroundAttackStates/AttackState"], function (require, exports, DragonStateBase_10, gl_matrix_30, SweepingState_2, AttackState_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.GroundAttackState = void 0;
@@ -3357,12 +2602,12 @@ define("Enemies/Dragon/States/GroundAttackStates/GroundAttackState", ["require",
             this.spawnProjectile = spawnProjectile;
             this.shared = shared;
             this.internalState = this.SWEEPING_STATE();
-            this.dir = gl_matrix_38.vec3.fromValues(-0.00010, 0, 0);
+            this.dir = gl_matrix_30.vec3.fromValues(-0.00010, 0, 0);
         }
         async Update(delta) {
             // Move left and right. Change direction when colliding with a wall
             if (this.dragon.WillCollide(this.dir, delta)) {
-                this.dir = gl_matrix_38.vec3.fromValues(this.dir[0] * -1, 0, 0);
+                this.dir = gl_matrix_30.vec3.fromValues(this.dir[0] * -1, 0, 0);
                 this.dragon.ResetVelocity();
             }
             this.dragon.Move(this.dir, delta);
@@ -3380,7 +2625,187 @@ define("Point", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
 });
-define("Enemies/Dragon/DragonEnemy", ["require", "exports", "gl-matrix", "Shader", "Sprite", "TexturePool", "Utils", "SoundEffectPool", "Enemies/IEnemy", "Enemies/Dragon/States/IdleState", "Enemies/Dragon/States/RushStates/RushState", "Enemies/Dragon/States/FlyAttackStates/FlyAttackState", "Enemies/Dragon/States/EnterArenaState", "Enemies/Dragon/States/GroundAttackStates/GroundAttackState", "Components/Animation", "Components/PhysicsComponent", "Components/FlashOverlayComponent", "Components/DamageComponent", "Hero/States/StompState"], function (require, exports, gl_matrix_39, Shader_9, Sprite_12, TexturePool_8, Utils_11, SoundEffectPool_7, IEnemy_1, IdleState_2, RushState_1, FlyAttackState_1, EnterArenaState_1, GroundAttackState_1, Animation_5, PhysicsComponent_3, FlashOverlayComponent_2, DamageComponent_2, StompState_2) {
+define("Hero/HeroMovementBehaviour", ["require", "exports", "gl-matrix"], function (require, exports, gl_matrix_31) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.HeroMovementBehaviour = void 0;
+    class HeroMovementBehaviour {
+        constructor(hero, physicsComponent) {
+            this.hero = hero;
+            this.physicsComponent = physicsComponent;
+        }
+        MoveLeft(delta) {
+            this.physicsComponent.AddToExternalForce(gl_matrix_31.vec3.scale(gl_matrix_31.vec3.create(), gl_matrix_31.vec3.fromValues(-this.hero.Speed, 0, 0), delta));
+            this.hero.SetAnimationFrameset("left_walk");
+            this.hero.FaceLeft();
+        }
+        MoveRight(delta) {
+            this.physicsComponent.AddToExternalForce(gl_matrix_31.vec3.scale(gl_matrix_31.vec3.create(), gl_matrix_31.vec3.fromValues(this.hero.Speed, 0, 0), delta));
+            this.hero.SetAnimationFrameset("right_walk");
+            this.hero.FaceRight();
+        }
+    }
+    exports.HeroMovementBehaviour = HeroMovementBehaviour;
+});
+define("Projectiles/MeleeAttack", ["require", "exports", "gl-matrix", "Shader", "Sprite", "TexturePool", "Utils", "SoundEffectPool", "Projectiles/ProjectileBase", "Components/Animation", "ICollider"], function (require, exports, gl_matrix_32, Shader_7, Sprite_10, TexturePool_6, Utils_9, SoundEffectPool_5, ProjectileBase_4, Animation_3, ICollider_2) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.MeleeAttack = void 0;
+    // MeleeAttack is considered as a stationary projectile
+    class MeleeAttack extends ProjectileBase_4.ProjectileBase {
+        constructor(position, facingDirection, shader, bbShader, attackSound, texture) {
+            const spriteVisualScale = gl_matrix_32.vec2.fromValues(4, 3);
+            const bbSize = gl_matrix_32.vec2.fromValues(1.25, 2);
+            const bbOffset = facingDirection[0] > 0 ?
+                gl_matrix_32.vec3.fromValues(1.25, 0.5, 0) :
+                gl_matrix_32.vec3.fromValues(-(bbSize[0] - 2.75), 0.5, 0);
+            const sprite = new Sprite_10.Sprite(Utils_9.Utils.DefaultSpriteVertices, Utils_9.Utils.CreateTextureCoordinates(0.0 / 5.0, 0.0 / 2.0, 1.0 / 5.0, 1.0 / 2.0));
+            const animationMustComplete = true;
+            super(shader, texture, sprite, position, spriteVisualScale, bbOffset, bbSize, null, animationMustComplete, new ICollider_2.NullCollider(), bbShader);
+            this.facingDirection = facingDirection;
+            this.attackSound = attackSound;
+            this.attackSoundPlayed = false;
+            this.currentFrameSet = [
+                gl_matrix_32.vec2.fromValues(1 / 5.0, 1 / 2.0),
+                gl_matrix_32.vec2.fromValues(2 / 5.0, 1 / 2.0),
+                gl_matrix_32.vec2.fromValues(3 / 5.0, 1 / 2.0)
+            ];
+            this.animation = new Animation_3.Animation(1 / 30 * 1000, this.renderer);
+            this.renderer.TextureOffset = this.currentFrameSet[0];
+        }
+        async CollideWithAttack(attack) {
+            // No-op as hero attacks shouldn't interact with each other
+        }
+        static async Create(position, facingDirection) {
+            // TODO: i really should rename the fragment shader from Hero.frag as everything seems to use it...
+            const shader = await Shader_7.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
+            const bbShader = await Shader_7.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
+            const attackSound = await SoundEffectPool_5.SoundEffectPool.GetInstance().GetAudio('audio/sword.mp3');
+            const texture = await TexturePool_6.TexturePool.GetInstance().GetTexture('textures/Sword1.png');
+            return new MeleeAttack(position, facingDirection, shader, bbShader, attackSound, texture);
+        }
+        get PushbackForce() {
+            return gl_matrix_32.vec3.fromValues(this.facingDirection[0] * 0.0075, -0.005, 0);
+        }
+        async OnHit() {
+            this.alreadyHit = true;
+            // no hit sound here for the moment as it can differ on every enemy type
+        }
+        async Visit(hero) {
+            // this shouldn't happen as melee attack is an attack by the hero. In the future enemies could use it too...
+            throw new Error('Method not implemented.');
+        }
+        async Update(delta) {
+            if (!this.attackSoundPlayed) {
+                const pitch = 0.8 + Math.random() * (1.4 - 0.8);
+                await this.attackSound.Play(pitch);
+                this.attackSoundPlayed = true;
+            }
+            const animationFinished = this.animation.Animate(delta, this.currentFrameSet);
+            if (animationFinished) {
+                this.alreadyHit = true;
+                this.OnHitListeners.forEach(l => l.DespawnAttack(this));
+            }
+        }
+        Dispose() {
+            super.Dispose();
+            this.shader.Delete();
+            this.bbShader.Delete();
+        }
+    }
+    exports.MeleeAttack = MeleeAttack;
+});
+define("Hero/States/SharedHeroStateVariables", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+});
+define("Hero/States/HeroBaseState", ["require", "exports", "Hero/HeroMovementBehaviour", "Projectiles/MeleeAttack", "gl-matrix"], function (require, exports, HeroMovementBehaviour_1, MeleeAttack_1, gl_matrix_33) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.HeroBaseState = void 0;
+    class HeroBaseState {
+        constructor(hero, physicsComponent, damageComponent, SpawnProjectile, sharedStateVariables) {
+            this.hero = hero;
+            this.physicsComponent = physicsComponent;
+            this.damageComponent = damageComponent;
+            this.SpawnProjectile = SpawnProjectile;
+            this.sharedStateVariables = sharedStateVariables;
+            this.movementBehaviour = new HeroMovementBehaviour_1.HeroMovementBehaviour(hero, physicsComponent);
+        }
+        async Update(delta) {
+            // Handle death
+            if (this.hero.Health <= 0) {
+                await this.hero.ChangeState(this.hero.DEAD_STATE());
+            }
+            await this.HandleInput();
+            this.OverHealCountdown();
+            this.sharedStateVariables.timeSinceLastMeleeAttack += delta;
+            this.sharedStateVariables.timeInOverHeal += delta;
+            this.sharedStateVariables.timeSinceLastDash += delta;
+            this.sharedStateVariables.timeSinceLastStomp += delta;
+            this.damageComponent.Update(delta);
+            await this.UpdateState(delta);
+        }
+        async HandleInput() {
+            if (this.hero.InputSource.Attack()) {
+                const attackPosition = this.AttackSpawnPosition;
+                if (this.sharedStateVariables.timeSinceLastMeleeAttack > 350) {
+                    this.sharedStateVariables.timeSinceLastMeleeAttack = 0;
+                    if (this.SpawnProjectile) {
+                        // TODO: creating an attack instance on every attack is wasteful.
+                        this.SpawnProjectile(this.hero, await MeleeAttack_1.MeleeAttack.Create(attackPosition, this.hero.FacingDirection));
+                    }
+                }
+            }
+        }
+        get AttackSpawnPosition() {
+            return this.hero.FacingDirection[0] > 0 ?
+                gl_matrix_33.vec3.add(gl_matrix_33.vec3.create(), this.hero.CenterPosition, gl_matrix_33.vec3.fromValues(0, -1, 0)) :
+                gl_matrix_33.vec3.add(gl_matrix_33.vec3.create(), this.hero.CenterPosition, gl_matrix_33.vec3.fromValues(-4, -1, 0));
+        }
+        OverHealCountdown() {
+            if (this.hero.Health > 100) {
+                if (this.sharedStateVariables.timeInOverHeal > 1000) {
+                    this.hero.Health--;
+                    this.sharedStateVariables.timeInOverHeal = 0;
+                }
+            }
+        }
+    }
+    exports.HeroBaseState = HeroBaseState;
+});
+define("Hero/States/StompState", ["require", "exports", "Hero/States/HeroBaseState", "gl-matrix"], function (require, exports, HeroBaseState_1, gl_matrix_34) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.StompState = void 0;
+    class StompState extends HeroBaseState_1.HeroBaseState {
+        constructor(hero, spawnProjectile, physicsComponent, damageComponent, stompSound, sharedStateVariables, landSound) {
+            super(hero, physicsComponent, damageComponent, spawnProjectile, sharedStateVariables);
+            this.stompSound = stompSound;
+            this.landSound = landSound;
+        }
+        async UpdateState(delta) {
+            if (this.physicsComponent.OnGround) {
+                if (gl_matrix_34.vec3.squaredLength(this.physicsComponent.Velocity) < 0.00001) {
+                    await this.hero.ChangeState(this.hero.IDLE_STATE());
+                    this.sharedStateVariables.dashAvailable = true;
+                    await this.landSound.Play(1.8, 0.5);
+                }
+            }
+        }
+        async Enter() {
+            // using Enter() so we only run this part of the code once
+            this.physicsComponent.AddToExternalForce(gl_matrix_34.vec3.fromValues(0, 0.05, 0));
+            this.sharedStateVariables.timeSinceLastStomp = 0;
+            const pitch = 0.8 + Math.random() * (1.25 - 0.8);
+            await this.stompSound.Play(pitch);
+        }
+        async Exit() {
+        }
+    }
+    exports.StompState = StompState;
+});
+define("Enemies/Dragon/DragonEnemy", ["require", "exports", "gl-matrix", "Shader", "Sprite", "TexturePool", "Utils", "SoundEffectPool", "Enemies/IEnemy", "Enemies/Dragon/States/IdleState", "Enemies/Dragon/States/RushStates/RushState", "Enemies/Dragon/States/FlyAttackStates/FlyAttackState", "Enemies/Dragon/States/EnterArenaState", "Enemies/Dragon/States/GroundAttackStates/GroundAttackState", "Components/Animation", "Components/PhysicsComponent", "Components/FlashOverlayComponent", "Components/DamageComponent", "Hero/States/StompState"], function (require, exports, gl_matrix_35, Shader_8, Sprite_11, TexturePool_7, Utils_10, SoundEffectPool_6, IEnemy_1, IdleState_1, RushState_1, FlyAttackState_1, EnterArenaState_1, GroundAttackState_1, Animation_4, PhysicsComponent_2, FlashOverlayComponent_1, DamageComponent_1, StompState_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.DragonEnemy = void 0;
@@ -3391,7 +2816,7 @@ define("Enemies/Dragon/DragonEnemy", ["require", "exports", "gl-matrix", "Shader
             await this.state.Enter();
         }
         IDLE_STATE() {
-            return new IdleState_2.IdleState(this.hero, this, this.collider, this.biteAttackSound, this.spawnProjectile, this.shared);
+            return new IdleState_1.IdleState(this.hero, this, this.collider, this.biteAttackSound, this.spawnProjectile, this.shared);
         }
         RUSH_STATE() {
             return new RushState_1.RushState(this.hero, this, this.rushSound, this.backingStartSound, this.biteAttackSound, this.spawnProjectile, this.shared);
@@ -3401,7 +2826,7 @@ define("Enemies/Dragon/DragonEnemy", ["require", "exports", "gl-matrix", "Shader
         }
         ENTER_ARENA_STATE() {
             const enterWaypoint = this.enterWaypoint ?
-                gl_matrix_39.vec3.fromValues(this.enterWaypoint.x, this.enterWaypoint.y, 0) : null;
+                gl_matrix_35.vec3.fromValues(this.enterWaypoint.x, this.enterWaypoint.y, 0) : null;
             return new EnterArenaState_1.EnterArenaState(this.hero, this, this.collider, enterWaypoint);
         }
         GROUND_ATTACK_STATE() {
@@ -3409,9 +2834,9 @@ define("Enemies/Dragon/DragonEnemy", ["require", "exports", "gl-matrix", "Shader
         }
         constructor(position, health, shader, bbShader, visualScale, // TODO: this should not be a parameter but hardcoded
         collider, hero, onDeath, spawnProjectile, enemyDamageSound, enemyDeathSound, biteAttackSound, rushSound, backingStartSound, texture, enterWaypoint) {
-            const sprite = new Sprite_12.Sprite(Utils_11.Utils.DefaultSpriteVertices, Utils_11.Utils.CreateTextureCoordinates(0.0 / 12.0, 0.0 / 8.0, 1.0 / 12.0, 1.0 / 8.0));
-            const bbSize = gl_matrix_39.vec2.fromValues(4.8, 3);
-            const bbOffset = gl_matrix_39.vec3.fromValues(0.1, 1.5, 0);
+            const sprite = new Sprite_11.Sprite(Utils_10.Utils.DefaultSpriteVertices, Utils_10.Utils.CreateTextureCoordinates(0.0 / 12.0, 0.0 / 8.0, 1.0 / 12.0, 1.0 / 8.0));
+            const bbSize = gl_matrix_35.vec2.fromValues(4.8, 3);
+            const bbOffset = gl_matrix_35.vec3.fromValues(0.1, 1.5, 0);
             super(shader, sprite, texture, bbShader, bbSize, bbOffset, position, visualScale, health);
             this.collider = collider;
             this.hero = hero;
@@ -3425,14 +2850,14 @@ define("Enemies/Dragon/DragonEnemy", ["require", "exports", "gl-matrix", "Shader
             this.enterWaypoint = enterWaypoint;
             this.state = this.ENTER_ARENA_STATE();
             this.leftFacingAnimationFrames = [
-                gl_matrix_39.vec2.fromValues(3 / 12, 3 / 8),
-                gl_matrix_39.vec2.fromValues(4 / 12, 3 / 8),
-                gl_matrix_39.vec2.fromValues(5 / 12, 3 / 8)
+                gl_matrix_35.vec2.fromValues(3 / 12, 3 / 8),
+                gl_matrix_35.vec2.fromValues(4 / 12, 3 / 8),
+                gl_matrix_35.vec2.fromValues(5 / 12, 3 / 8)
             ];
             this.rightFacingAnimationFrames = [
-                gl_matrix_39.vec2.fromValues(3 / 12, 1 / 8),
-                gl_matrix_39.vec2.fromValues(4 / 12, 1 / 8),
-                gl_matrix_39.vec2.fromValues(5 / 12, 1 / 8)
+                gl_matrix_35.vec2.fromValues(3 / 12, 1 / 8),
+                gl_matrix_35.vec2.fromValues(4 / 12, 1 / 8),
+                gl_matrix_35.vec2.fromValues(5 / 12, 1 / 8)
             ];
             this.currentFrameSet = this.leftFacingAnimationFrames;
             // Behaviour related
@@ -3441,47 +2866,47 @@ define("Enemies/Dragon/DragonEnemy", ["require", "exports", "gl-matrix", "Shader
                 timeSinceLastCharge: 9999,
                 timeSinceLastFireBall: 0
             };
-            this.lastFacingDirection = gl_matrix_39.vec3.fromValues(-1, 0, 0); // Facing right by default
-            this.lastPosition = gl_matrix_39.vec3.create();
-            this.animation = new Animation_5.Animation(1 / 60 * 1000 * 15, this.renderer);
-            this.physicsComponent = new PhysicsComponent_3.PhysicsComponent(position, this.lastPosition, () => this.BoundingBox, bbOffset, collider, true);
-            this.flashOverlayComponent = new FlashOverlayComponent_2.FlashOverlayComponent(this.shader);
-            this.damageComponent = new DamageComponent_2.DamageComponent(this, this.flashOverlayComponent, this.enemyDamageSound, this.physicsComponent, 15);
+            this.lastFacingDirection = gl_matrix_35.vec3.fromValues(-1, 0, 0); // Facing right by default
+            this.lastPosition = gl_matrix_35.vec3.create();
+            this.animation = new Animation_4.Animation(1 / 60 * 1000 * 15, this.renderer);
+            this.physicsComponent = new PhysicsComponent_2.PhysicsComponent(position, this.lastPosition, () => this.BoundingBox, bbOffset, collider, true);
+            this.flashOverlayComponent = new FlashOverlayComponent_1.FlashOverlayComponent(this.shader);
+            this.damageComponent = new DamageComponent_1.DamageComponent(this, this.flashOverlayComponent, this.enemyDamageSound, this.physicsComponent, 250);
         }
         static async Create(position, health, visualScale, collider, hero, onDeath, spawnProjectile, enterWaypoint) {
-            const shader = await Shader_9.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
-            const bbShader = await Shader_9.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
+            const shader = await Shader_8.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
+            const bbShader = await Shader_8.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
             // TODO: ezeket a soundokat a state-ekben kéne létrehozni, nem innen lepasszolgatni
-            const enemyDamageSound = await SoundEffectPool_7.SoundEffectPool.GetInstance().GetAudio('audio/enemy_damage.wav');
-            const enemyDeathSound = await SoundEffectPool_7.SoundEffectPool.GetInstance().GetAudio('audio/enemy_death.wav');
-            const biteAttackSound = await SoundEffectPool_7.SoundEffectPool.GetInstance().GetAudio('audio/bite2.wav');
-            const rushSound = await SoundEffectPool_7.SoundEffectPool.GetInstance().GetAudio('audio/dragon_roar.mp3');
-            const backingStartSound = await SoundEffectPool_7.SoundEffectPool.GetInstance().GetAudio('audio/charge_up.mp3');
-            const texture = await TexturePool_8.TexturePool.GetInstance().GetTexture('textures/Monster2.png');
+            const enemyDamageSound = await SoundEffectPool_6.SoundEffectPool.GetInstance().GetAudio('audio/enemy_damage.wav');
+            const enemyDeathSound = await SoundEffectPool_6.SoundEffectPool.GetInstance().GetAudio('audio/enemy_death.wav');
+            const biteAttackSound = await SoundEffectPool_6.SoundEffectPool.GetInstance().GetAudio('audio/bite2.wav');
+            const rushSound = await SoundEffectPool_6.SoundEffectPool.GetInstance().GetAudio('audio/dragon_roar.mp3');
+            const backingStartSound = await SoundEffectPool_6.SoundEffectPool.GetInstance().GetAudio('audio/charge_up.mp3');
+            const texture = await TexturePool_7.TexturePool.GetInstance().GetTexture('textures/Monster2.png');
             return new DragonEnemy(position, health, shader, bbShader, visualScale, collider, hero, onDeath, spawnProjectile, enemyDamageSound, enemyDeathSound, biteAttackSound, rushSound, backingStartSound, texture, enterWaypoint);
         }
         async Visit(hero) {
-            if (this.hero.StateClass === StompState_2.StompState.name) {
-                this.physicsComponent.AddToExternalForce(gl_matrix_39.vec3.fromValues(0, -0.05, 0));
+            if (this.hero.StateClass === StompState_1.StompState.name) {
+                this.physicsComponent.AddToExternalForce(gl_matrix_35.vec3.fromValues(0, -0.05, 0));
                 await hero.ChangeState(hero.AFTER_STOMP_STATE());
-                await this.DamageWithInvincibilityConsidered(gl_matrix_39.vec3.create(), 1); // Damage the enemy without pushing it to any direction
+                await this.DamageWithInvincibilityConsidered(gl_matrix_35.vec3.create(), 1); // Damage the enemy without pushing it to any direction
             }
         }
         get CenterPosition() {
-            return gl_matrix_39.vec3.fromValues(this.position[0] + this.visualScale[0] / 2, this.position[1] + this.visualScale[1] / 2, 0);
+            return gl_matrix_35.vec3.fromValues(this.position[0] + this.visualScale[0] / 2, this.position[1] + this.visualScale[1] / 2, 0);
         }
         get FacingDirection() {
             return this.lastFacingDirection;
         }
         get BiteProjectilePosition() {
             return this.FacingDirection[0] > 0 ?
-                gl_matrix_39.vec3.add(gl_matrix_39.vec3.create(), this.position, gl_matrix_39.vec3.fromValues((-0) - 1.6, 1, 0)) :
-                gl_matrix_39.vec3.add(gl_matrix_39.vec3.create(), this.position, gl_matrix_39.vec3.fromValues((+0) + 1.6, 1, 0));
+                gl_matrix_35.vec3.add(gl_matrix_35.vec3.create(), this.position, gl_matrix_35.vec3.fromValues((-0) - 1.6, 1, 0)) :
+                gl_matrix_35.vec3.add(gl_matrix_35.vec3.create(), this.position, gl_matrix_35.vec3.fromValues((+0) + 1.6, 1, 0));
         }
         get FireBallProjectileSpawnPosition() {
             return this.FacingDirection[0] > 0 ?
-                gl_matrix_39.vec3.add(gl_matrix_39.vec3.create(), this.CenterPosition, gl_matrix_39.vec3.fromValues(-3, -1, 0)) :
-                gl_matrix_39.vec3.add(gl_matrix_39.vec3.create(), this.CenterPosition, gl_matrix_39.vec3.fromValues(3, -1, 0));
+                gl_matrix_35.vec3.add(gl_matrix_35.vec3.create(), this.CenterPosition, gl_matrix_35.vec3.fromValues(-3, -1, 0)) :
+                gl_matrix_35.vec3.add(gl_matrix_35.vec3.create(), this.CenterPosition, gl_matrix_35.vec3.fromValues(3, -1, 0));
         }
         get EndCondition() {
             return true;
@@ -3511,14 +2936,14 @@ define("Enemies/Dragon/DragonEnemy", ["require", "exports", "gl-matrix", "Shader
             this.shared.timeSinceLastFireBall += delta;
             this.damageComponent.Update(delta);
             // Face in the direction of the hero
-            const dir = gl_matrix_39.vec3.sub(gl_matrix_39.vec3.create(), this.CenterPosition, this.hero.CenterPosition);
+            const dir = gl_matrix_35.vec3.sub(gl_matrix_35.vec3.create(), this.CenterPosition, this.hero.CenterPosition);
             if (dir[0] < 0) {
                 this.currentFrameSet = this.rightFacingAnimationFrames;
-                gl_matrix_39.vec3.set(this.lastFacingDirection, -1, 0, 0);
+                gl_matrix_35.vec3.set(this.lastFacingDirection, -1, 0, 0);
             }
             else if (dir[0] > 0) {
                 this.currentFrameSet = this.leftFacingAnimationFrames;
-                gl_matrix_39.vec3.set(this.lastFacingDirection, 1, 0, 0);
+                gl_matrix_35.vec3.set(this.lastFacingDirection, 1, 0, 0);
             }
             this.animation.Animate(delta, this.currentFrameSet);
             this.physicsComponent.Update(delta);
@@ -3526,7 +2951,7 @@ define("Enemies/Dragon/DragonEnemy", ["require", "exports", "gl-matrix", "Shader
             await this.state.Update(delta);
         }
         Move(direction, delta) {
-            this.physicsComponent.AddToExternalForce(gl_matrix_39.vec3.scale(gl_matrix_39.vec3.create(), direction, delta));
+            this.physicsComponent.AddToExternalForce(gl_matrix_35.vec3.scale(gl_matrix_35.vec3.create(), direction, delta));
         }
         /**
          * Check if movement to the direction would cause a collision
@@ -3557,7 +2982,7 @@ define("Waypoint", ["require", "exports"], function (require, exports) {
     }
     exports.Waypoint = Waypoint;
 });
-define("Enemies/SlimeEnemy", ["require", "exports", "gl-matrix", "Sprite", "Utils", "Shader", "TexturePool", "SoundEffectPool", "Waypoint", "Enemies/IEnemy", "Components/Animation", "Components/PhysicsComponent", "Components/FlashOverlayComponent", "Components/DamageComponent", "Hero/States/StompState"], function (require, exports, gl_matrix_40, Sprite_13, Utils_12, Shader_10, TexturePool_9, SoundEffectPool_8, Waypoint_1, IEnemy_2, Animation_6, PhysicsComponent_4, FlashOverlayComponent_3, DamageComponent_3, StompState_3) {
+define("Enemies/SlimeEnemy", ["require", "exports", "gl-matrix", "Sprite", "Utils", "Shader", "TexturePool", "SoundEffectPool", "Waypoint", "Enemies/IEnemy", "Components/Animation", "Components/PhysicsComponent", "Components/FlashOverlayComponent", "Components/DamageComponent", "Hero/States/StompState"], function (require, exports, gl_matrix_36, Sprite_12, Utils_11, Shader_9, TexturePool_8, SoundEffectPool_7, Waypoint_1, IEnemy_2, Animation_5, PhysicsComponent_3, FlashOverlayComponent_2, DamageComponent_2, StompState_2) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.SlimeEnemy = void 0;
@@ -3566,10 +2991,10 @@ define("Enemies/SlimeEnemy", ["require", "exports", "gl-matrix", "Sprite", "Util
      */
     class SlimeEnemy extends IEnemy_2.EnemyBase {
         constructor(position, shader, bbShader, visualScale, collider, onDeath, enemyDamageSound, enemyDeathSound, texture) {
-            const sprite = new Sprite_13.Sprite(Utils_12.Utils.DefaultSpriteVertices, Utils_12.Utils.CreateTextureCoordinates(0.0 / 12.0, // These constants are hardcoded with "monster1.png" in mind
+            const sprite = new Sprite_12.Sprite(Utils_11.Utils.DefaultSpriteVertices, Utils_11.Utils.CreateTextureCoordinates(0.0 / 12.0, // These constants are hardcoded with "monster1.png" in mind
             0.0 / 8.0, 1.0 / 12.0, 1.0 / 8.0));
-            const bbSize = gl_matrix_40.vec2.fromValues(0.8, 1.0);
-            const bbOffset = gl_matrix_40.vec3.fromValues(1.2, 1.8, 0);
+            const bbSize = gl_matrix_36.vec2.fromValues(0.8, 1.0);
+            const bbOffset = gl_matrix_36.vec3.fromValues(1.2, 1.8, 0);
             const health = 3;
             super(shader, sprite, texture, bbShader, bbSize, bbOffset, position, visualScale, health);
             this.collider = collider;
@@ -3581,42 +3006,42 @@ define("Enemies/SlimeEnemy", ["require", "exports", "gl-matrix", "Sprite", "Util
             this.maxSpeed = 0.00006;
             this.movementSpeed = Math.random() * (this.maxSpeed - this.minSpeed) + this.minSpeed;
             this.leftFacingAnimationFrames = [
-                gl_matrix_40.vec2.fromValues(0 / 12, 3 / 8),
-                gl_matrix_40.vec2.fromValues(1 / 12, 3 / 8),
-                gl_matrix_40.vec2.fromValues(2 / 12, 3 / 8)
+                gl_matrix_36.vec2.fromValues(0 / 12, 3 / 8),
+                gl_matrix_36.vec2.fromValues(1 / 12, 3 / 8),
+                gl_matrix_36.vec2.fromValues(2 / 12, 3 / 8)
             ];
             this.rightFacingAnimationFrames = [
-                gl_matrix_40.vec2.fromValues(0 / 12, 1 / 8),
-                gl_matrix_40.vec2.fromValues(1 / 12, 1 / 8),
-                gl_matrix_40.vec2.fromValues(2 / 12, 1 / 8)
+                gl_matrix_36.vec2.fromValues(0 / 12, 1 / 8),
+                gl_matrix_36.vec2.fromValues(1 / 12, 1 / 8),
+                gl_matrix_36.vec2.fromValues(2 / 12, 1 / 8)
             ];
             this.currentFrameSet = this.leftFacingAnimationFrames;
-            this.animation = new Animation_6.Animation(1 / 60 * 1000 * 15, this.renderer);
+            this.animation = new Animation_5.Animation(1 / 60 * 1000 * 15, this.renderer);
             // For now, slimes walk between their start position and another position with some constant offset
-            const originalWaypoint = new Waypoint_1.Waypoint(gl_matrix_40.vec3.clone(this.position), null);
-            const targetPosition = gl_matrix_40.vec3.add(gl_matrix_40.vec3.create(), gl_matrix_40.vec3.clone(this.position), gl_matrix_40.vec3.fromValues(-6, 0, 0));
+            const originalWaypoint = new Waypoint_1.Waypoint(gl_matrix_36.vec3.clone(this.position), null);
+            const targetPosition = gl_matrix_36.vec3.add(gl_matrix_36.vec3.create(), gl_matrix_36.vec3.clone(this.position), gl_matrix_36.vec3.fromValues(-6, 0, 0));
             this.targetWaypoint = new Waypoint_1.Waypoint(targetPosition, originalWaypoint);
             originalWaypoint.next = this.targetWaypoint;
-            this.physicsComponent = new PhysicsComponent_4.PhysicsComponent(this.position, gl_matrix_40.vec3.create(), () => this.BoundingBox, this.bbOffset, this.collider, false);
-            const damageFlashComponent = new FlashOverlayComponent_3.FlashOverlayComponent(this.shader);
-            this.damageComponent = new DamageComponent_3.DamageComponent(this, damageFlashComponent, this.enemyDamageSound, this.physicsComponent, 0);
+            this.physicsComponent = new PhysicsComponent_3.PhysicsComponent(this.position, gl_matrix_36.vec3.create(), () => this.BoundingBox, this.bbOffset, this.collider, false);
+            const damageFlashComponent = new FlashOverlayComponent_2.FlashOverlayComponent(this.shader);
+            this.damageComponent = new DamageComponent_2.DamageComponent(this, damageFlashComponent, this.enemyDamageSound, this.physicsComponent, 0);
         }
         static async Create(position, visualScale, collider, onDeath) {
-            const shader = await Shader_10.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
-            const bbShader = await Shader_10.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
-            const enemyDamageSound = await SoundEffectPool_8.SoundEffectPool.GetInstance().GetAudio('audio/enemy_damage.wav');
-            const enemyDeathSound = await SoundEffectPool_8.SoundEffectPool.GetInstance().GetAudio('audio/enemy_death.wav');
-            const texture = await TexturePool_9.TexturePool.GetInstance().GetTexture('textures/monster1.png');
+            const shader = await Shader_9.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
+            const bbShader = await Shader_9.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
+            const enemyDamageSound = await SoundEffectPool_7.SoundEffectPool.GetInstance().GetAudio('audio/enemy_damage.wav');
+            const enemyDeathSound = await SoundEffectPool_7.SoundEffectPool.GetInstance().GetAudio('audio/enemy_death.wav');
+            const texture = await TexturePool_8.TexturePool.GetInstance().GetTexture('textures/monster1.png');
             return new SlimeEnemy(position, shader, bbShader, visualScale, collider, onDeath, enemyDamageSound, enemyDeathSound, texture);
         }
         async Visit(hero) {
-            if (hero.StateClass !== StompState_3.StompState.name) {
-                const pushbackForceRatio = gl_matrix_40.vec3.fromValues(hero.FacingDirection[0] * -0.0075, -0.003, 0);
+            if (hero.StateClass !== StompState_2.StompState.name) {
+                const pushbackForceRatio = gl_matrix_36.vec3.fromValues(hero.FacingDirection[0] * -0.0075, -0.003, 0);
                 await hero.DamageWithInvincibilityConsidered(pushbackForceRatio, 34);
             }
-            else if (hero.StateClass === StompState_3.StompState.name) {
+            else if (hero.StateClass === StompState_2.StompState.name) {
                 await hero.ChangeState(hero.AFTER_STOMP_STATE());
-                await this.Damage(gl_matrix_40.vec3.create(), 1); // Damage the enemy without pushing it to any direction
+                await this.Damage(gl_matrix_36.vec3.create(), 1); // Damage the enemy without pushing it to any direction
             }
         }
         get EndCondition() {
@@ -3643,21 +3068,21 @@ define("Enemies/SlimeEnemy", ["require", "exports", "gl-matrix", "Sprite", "Util
             this.physicsComponent.Update(delta);
         }
         MoveTowardsNextWaypoint(delta) {
-            const dir = gl_matrix_40.vec3.sub(gl_matrix_40.vec3.create(), this.position, this.targetWaypoint.position);
+            const dir = gl_matrix_36.vec3.sub(gl_matrix_36.vec3.create(), this.position, this.targetWaypoint.position);
             if (dir[0] < 0) {
                 this.currentFrameSet = this.rightFacingAnimationFrames;
-                this.Move(gl_matrix_40.vec3.fromValues(this.movementSpeed, 0, 0), delta);
+                this.Move(gl_matrix_36.vec3.fromValues(this.movementSpeed, 0, 0), delta);
             }
             else {
                 this.currentFrameSet = this.leftFacingAnimationFrames;
-                this.Move(gl_matrix_40.vec3.fromValues(-this.movementSpeed, 0, 0), delta);
+                this.Move(gl_matrix_36.vec3.fromValues(-this.movementSpeed, 0, 0), delta);
             }
-            if (gl_matrix_40.vec3.distance(this.position, this.targetWaypoint.position) < 0.025 && this.targetWaypoint.next) {
+            if (gl_matrix_36.vec3.distance(this.position, this.targetWaypoint.position) < 0.025 && this.targetWaypoint.next) {
                 this.targetWaypoint = this.targetWaypoint.next;
             }
         }
         Move(direction, delta) {
-            this.physicsComponent.AddToExternalForce(gl_matrix_40.vec3.scale(gl_matrix_40.vec3.create(), direction, delta));
+            this.physicsComponent.AddToExternalForce(gl_matrix_36.vec3.scale(gl_matrix_36.vec3.create(), direction, delta));
         }
         Dispose() {
             super.Dispose();
@@ -3667,7 +3092,7 @@ define("Enemies/SlimeEnemy", ["require", "exports", "gl-matrix", "Sprite", "Util
     }
     exports.SlimeEnemy = SlimeEnemy;
 });
-define("Enemies/Spike", ["require", "exports", "gl-matrix", "Enemies/IEnemy", "TexturePool", "Sprite", "Utils", "Shader", "Hero/States/StompState"], function (require, exports, gl_matrix_41, IEnemy_3, TexturePool_10, Sprite_14, Utils_13, Shader_11, StompState_4) {
+define("Enemies/Spike", ["require", "exports", "gl-matrix", "Enemies/IEnemy", "TexturePool", "Sprite", "Utils", "Shader", "Hero/States/StompState"], function (require, exports, gl_matrix_37, IEnemy_3, TexturePool_9, Sprite_13, Utils_12, Shader_10, StompState_3) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Spike = void 0;
@@ -3676,15 +3101,15 @@ define("Enemies/Spike", ["require", "exports", "gl-matrix", "Enemies/IEnemy", "T
      */
     class Spike extends IEnemy_3.EnemyBase {
         constructor(position, visualScale, shader, bbShader, texture) {
-            const sprite = new Sprite_14.Sprite(Utils_13.Utils.DefaultSpriteVertices, Utils_13.Utils.DefaultSpriteTextureCoordinates);
-            const bbSize = gl_matrix_41.vec2.fromValues(1, 1);
-            const bbOffset = gl_matrix_41.vec3.fromValues(0, 0, 0);
+            const sprite = new Sprite_13.Sprite(Utils_12.Utils.DefaultSpriteVertices, Utils_12.Utils.DefaultSpriteTextureCoordinates);
+            const bbSize = gl_matrix_37.vec2.fromValues(1, 1);
+            const bbOffset = gl_matrix_37.vec3.fromValues(0, 0, 0);
             super(shader, sprite, texture, bbShader, bbSize, bbOffset, position, visualScale, 0);
         }
         static async Create(position, visualScale) {
-            const shader = await Shader_11.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
-            const bbShader = await Shader_11.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
-            const texture = await TexturePool_10.TexturePool.GetInstance().GetTexture('textures/spike.png');
+            const shader = await Shader_10.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
+            const bbShader = await Shader_10.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
+            const texture = await TexturePool_9.TexturePool.GetInstance().GetTexture('textures/spike.png');
             return new Spike(position, visualScale, shader, bbShader, texture);
         }
         async Update(delta) {
@@ -3700,12 +3125,12 @@ define("Enemies/Spike", ["require", "exports", "gl-matrix", "Enemies/IEnemy", "T
             return false;
         }
         async Visit(hero) {
-            if (hero.StateClass !== StompState_4.StompState.name) {
-                const pushbackForceRatio = gl_matrix_41.vec3.fromValues(0, -0.008, 0);
+            if (hero.StateClass !== StompState_3.StompState.name) {
+                const pushbackForceRatio = gl_matrix_37.vec3.fromValues(0, -0.008, 0);
                 await hero.DamageWithInvincibilityConsidered(pushbackForceRatio, 20);
             }
             else {
-                await hero.Damage(gl_matrix_41.vec3.fromValues(0, -0.008, 0), 20);
+                await hero.Damage(gl_matrix_37.vec3.fromValues(0, -0.008, 0), 20);
                 await hero.ChangeState(hero.AFTER_STOMP_STATE());
             }
         }
@@ -3717,7 +3142,7 @@ define("Enemies/Spike", ["require", "exports", "gl-matrix", "Enemies/IEnemy", "T
     }
     exports.Spike = Spike;
 });
-define("Enemies/Cactus", ["require", "exports", "gl-matrix", "Enemies/IEnemy", "TexturePool", "Shader", "Sprite", "Utils", "SoundEffectPool", "Components/Animation", "Components/FlashOverlayComponent", "Components/DamageComponent", "Components/PhysicsComponent", "ICollider", "Hero/States/StompState"], function (require, exports, gl_matrix_42, IEnemy_4, TexturePool_11, Shader_12, Sprite_15, Utils_14, SoundEffectPool_9, Animation_7, FlashOverlayComponent_4, DamageComponent_4, PhysicsComponent_5, ICollider_3, StompState_5) {
+define("Enemies/Cactus", ["require", "exports", "gl-matrix", "Enemies/IEnemy", "TexturePool", "Shader", "Sprite", "Utils", "SoundEffectPool", "Components/Animation", "Components/FlashOverlayComponent", "Components/DamageComponent", "Components/PhysicsComponent", "ICollider", "Hero/States/StompState"], function (require, exports, gl_matrix_38, IEnemy_4, TexturePool_10, Shader_11, Sprite_14, Utils_13, SoundEffectPool_8, Animation_6, FlashOverlayComponent_3, DamageComponent_3, PhysicsComponent_4, ICollider_3, StompState_4) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Cactus = void 0;
@@ -3726,72 +3151,72 @@ define("Enemies/Cactus", ["require", "exports", "gl-matrix", "Enemies/IEnemy", "
      */
     class Cactus extends IEnemy_4.EnemyBase {
         constructor(position, onDeath, shader, bbShader, texture, enemyDamageSound, enemyDeathSound) {
-            const sprite = new Sprite_15.Sprite(Utils_14.Utils.DefaultSpriteVertices, Utils_14.Utils.CreateTextureCoordinates(0 / 6, 0 / 8, 1 / 6, 1 / 8));
-            const bbSize = gl_matrix_42.vec2.fromValues(2.3, 2.5);
-            const bbOffset = gl_matrix_42.vec3.fromValues(0.35, 0.5, 0);
-            const visualScale = gl_matrix_42.vec2.fromValues(3, 3);
+            const sprite = new Sprite_14.Sprite(Utils_13.Utils.DefaultSpriteVertices, Utils_13.Utils.CreateTextureCoordinates(0 / 6, 0 / 8, 1 / 6, 1 / 8));
+            const bbSize = gl_matrix_38.vec2.fromValues(2.3, 2.5);
+            const bbOffset = gl_matrix_38.vec3.fromValues(0.35, 0.5, 0);
+            const visualScale = gl_matrix_38.vec2.fromValues(3, 3);
             const health = 3;
             super(shader, sprite, texture, bbShader, bbSize, bbOffset, position, visualScale, health);
             this.onDeath = onDeath;
             this.enemyDamageSound = enemyDamageSound;
             this.enemyDeathSound = enemyDeathSound;
             this.currentFrameSet = [
-                gl_matrix_42.vec2.fromValues(0 / 6, 0 / 8),
-                gl_matrix_42.vec2.fromValues(1 / 6, 0 / 8),
-                gl_matrix_42.vec2.fromValues(2 / 6, 0 / 8),
-                gl_matrix_42.vec2.fromValues(3 / 6, 0 / 8),
-                gl_matrix_42.vec2.fromValues(4 / 6, 0 / 8),
-                gl_matrix_42.vec2.fromValues(5 / 6, 0 / 8),
-                gl_matrix_42.vec2.fromValues(0 / 6, 1 / 8),
-                gl_matrix_42.vec2.fromValues(1 / 6, 1 / 8),
-                gl_matrix_42.vec2.fromValues(2 / 6, 1 / 8),
-                gl_matrix_42.vec2.fromValues(3 / 6, 1 / 8),
-                gl_matrix_42.vec2.fromValues(4 / 6, 1 / 8),
-                gl_matrix_42.vec2.fromValues(5 / 6, 1 / 8),
-                gl_matrix_42.vec2.fromValues(0 / 6, 2 / 8),
-                gl_matrix_42.vec2.fromValues(1 / 6, 2 / 8),
-                gl_matrix_42.vec2.fromValues(2 / 6, 2 / 8),
-                gl_matrix_42.vec2.fromValues(3 / 6, 2 / 8),
-                gl_matrix_42.vec2.fromValues(4 / 6, 2 / 8),
-                gl_matrix_42.vec2.fromValues(5 / 6, 2 / 8),
-                gl_matrix_42.vec2.fromValues(0 / 6, 3 / 8),
-                gl_matrix_42.vec2.fromValues(1 / 6, 3 / 8),
-                gl_matrix_42.vec2.fromValues(2 / 6, 3 / 8),
-                gl_matrix_42.vec2.fromValues(3 / 6, 3 / 8),
-                gl_matrix_42.vec2.fromValues(4 / 6, 3 / 8),
-                gl_matrix_42.vec2.fromValues(5 / 6, 3 / 8),
-                gl_matrix_42.vec2.fromValues(0 / 6, 4 / 8),
-                gl_matrix_42.vec2.fromValues(1 / 6, 4 / 8),
-                gl_matrix_42.vec2.fromValues(2 / 6, 4 / 8),
-                gl_matrix_42.vec2.fromValues(3 / 6, 4 / 8),
-                gl_matrix_42.vec2.fromValues(4 / 6, 4 / 8),
-                gl_matrix_42.vec2.fromValues(5 / 6, 4 / 8),
-                gl_matrix_42.vec2.fromValues(0 / 6, 5 / 8),
-                gl_matrix_42.vec2.fromValues(1 / 6, 5 / 8),
-                gl_matrix_42.vec2.fromValues(2 / 6, 5 / 8),
-                gl_matrix_42.vec2.fromValues(3 / 6, 5 / 8),
-                gl_matrix_42.vec2.fromValues(4 / 6, 5 / 8),
-                gl_matrix_42.vec2.fromValues(5 / 6, 5 / 8),
-                gl_matrix_42.vec2.fromValues(0 / 6, 6 / 8),
-                gl_matrix_42.vec2.fromValues(1 / 6, 6 / 8),
-                gl_matrix_42.vec2.fromValues(2 / 6, 6 / 8),
-                gl_matrix_42.vec2.fromValues(3 / 6, 6 / 8),
-                gl_matrix_42.vec2.fromValues(4 / 6, 6 / 8),
-                gl_matrix_42.vec2.fromValues(5 / 6, 6 / 8),
-                gl_matrix_42.vec2.fromValues(0 / 6, 7 / 8),
-                gl_matrix_42.vec2.fromValues(1 / 6, 7 / 8),
+                gl_matrix_38.vec2.fromValues(0 / 6, 0 / 8),
+                gl_matrix_38.vec2.fromValues(1 / 6, 0 / 8),
+                gl_matrix_38.vec2.fromValues(2 / 6, 0 / 8),
+                gl_matrix_38.vec2.fromValues(3 / 6, 0 / 8),
+                gl_matrix_38.vec2.fromValues(4 / 6, 0 / 8),
+                gl_matrix_38.vec2.fromValues(5 / 6, 0 / 8),
+                gl_matrix_38.vec2.fromValues(0 / 6, 1 / 8),
+                gl_matrix_38.vec2.fromValues(1 / 6, 1 / 8),
+                gl_matrix_38.vec2.fromValues(2 / 6, 1 / 8),
+                gl_matrix_38.vec2.fromValues(3 / 6, 1 / 8),
+                gl_matrix_38.vec2.fromValues(4 / 6, 1 / 8),
+                gl_matrix_38.vec2.fromValues(5 / 6, 1 / 8),
+                gl_matrix_38.vec2.fromValues(0 / 6, 2 / 8),
+                gl_matrix_38.vec2.fromValues(1 / 6, 2 / 8),
+                gl_matrix_38.vec2.fromValues(2 / 6, 2 / 8),
+                gl_matrix_38.vec2.fromValues(3 / 6, 2 / 8),
+                gl_matrix_38.vec2.fromValues(4 / 6, 2 / 8),
+                gl_matrix_38.vec2.fromValues(5 / 6, 2 / 8),
+                gl_matrix_38.vec2.fromValues(0 / 6, 3 / 8),
+                gl_matrix_38.vec2.fromValues(1 / 6, 3 / 8),
+                gl_matrix_38.vec2.fromValues(2 / 6, 3 / 8),
+                gl_matrix_38.vec2.fromValues(3 / 6, 3 / 8),
+                gl_matrix_38.vec2.fromValues(4 / 6, 3 / 8),
+                gl_matrix_38.vec2.fromValues(5 / 6, 3 / 8),
+                gl_matrix_38.vec2.fromValues(0 / 6, 4 / 8),
+                gl_matrix_38.vec2.fromValues(1 / 6, 4 / 8),
+                gl_matrix_38.vec2.fromValues(2 / 6, 4 / 8),
+                gl_matrix_38.vec2.fromValues(3 / 6, 4 / 8),
+                gl_matrix_38.vec2.fromValues(4 / 6, 4 / 8),
+                gl_matrix_38.vec2.fromValues(5 / 6, 4 / 8),
+                gl_matrix_38.vec2.fromValues(0 / 6, 5 / 8),
+                gl_matrix_38.vec2.fromValues(1 / 6, 5 / 8),
+                gl_matrix_38.vec2.fromValues(2 / 6, 5 / 8),
+                gl_matrix_38.vec2.fromValues(3 / 6, 5 / 8),
+                gl_matrix_38.vec2.fromValues(4 / 6, 5 / 8),
+                gl_matrix_38.vec2.fromValues(5 / 6, 5 / 8),
+                gl_matrix_38.vec2.fromValues(0 / 6, 6 / 8),
+                gl_matrix_38.vec2.fromValues(1 / 6, 6 / 8),
+                gl_matrix_38.vec2.fromValues(2 / 6, 6 / 8),
+                gl_matrix_38.vec2.fromValues(3 / 6, 6 / 8),
+                gl_matrix_38.vec2.fromValues(4 / 6, 6 / 8),
+                gl_matrix_38.vec2.fromValues(5 / 6, 6 / 8),
+                gl_matrix_38.vec2.fromValues(0 / 6, 7 / 8),
+                gl_matrix_38.vec2.fromValues(1 / 6, 7 / 8),
             ];
-            this.animation = new Animation_7.Animation(1 / 15 * 1000, this.renderer); // 15 fps animation
-            this.physicsComponent = new PhysicsComponent_5.PhysicsComponent(this.position, gl_matrix_42.vec3.create(), () => this.BoundingBox, this.bbOffset, new ICollider_3.NullCollider(), false, false);
-            const damageFlashComponent = new FlashOverlayComponent_4.FlashOverlayComponent(this.shader);
-            this.damageComponent = new DamageComponent_4.DamageComponent(this, damageFlashComponent, this.enemyDamageSound, this.physicsComponent, 0);
+            this.animation = new Animation_6.Animation(1 / 15 * 1000, this.renderer); // 15 fps animation
+            this.physicsComponent = new PhysicsComponent_4.PhysicsComponent(this.position, gl_matrix_38.vec3.create(), () => this.BoundingBox, this.bbOffset, new ICollider_3.NullCollider(), false, false);
+            const damageFlashComponent = new FlashOverlayComponent_3.FlashOverlayComponent(this.shader);
+            this.damageComponent = new DamageComponent_3.DamageComponent(this, damageFlashComponent, this.enemyDamageSound, this.physicsComponent, 0);
         }
         static async Create(position, onDeath) {
-            const shader = await Shader_12.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
-            const bbShader = await Shader_12.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
-            const damageSound = await SoundEffectPool_9.SoundEffectPool.GetInstance().GetAudio('audio/enemy_damage.wav');
-            const deathSound = await SoundEffectPool_9.SoundEffectPool.GetInstance().GetAudio('audio/enemy_death.wav');
-            const texture = await TexturePool_11.TexturePool.GetInstance().GetTexture('textures/cactus1.png');
+            const shader = await Shader_11.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
+            const bbShader = await Shader_11.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
+            const damageSound = await SoundEffectPool_8.SoundEffectPool.GetInstance().GetAudio('audio/enemy_damage.wav');
+            const deathSound = await SoundEffectPool_8.SoundEffectPool.GetInstance().GetAudio('audio/enemy_death.wav');
+            const texture = await TexturePool_10.TexturePool.GetInstance().GetTexture('textures/cactus1.png');
             return new Cactus(position, onDeath, shader, bbShader, texture, damageSound, deathSound);
         }
         async Update(delta) {
@@ -3799,7 +3224,7 @@ define("Enemies/Cactus", ["require", "exports", "gl-matrix", "Enemies/IEnemy", "
             this.damageComponent.Update(delta);
         }
         async Damage(pushbackForce, damage) {
-            await this.damageComponent.Damage(gl_matrix_42.vec3.create(), damage);
+            await this.damageComponent.Damage(gl_matrix_38.vec3.create(), damage);
             if (this.health <= 0) {
                 if (this.onDeath) {
                     await this.enemyDeathSound.Play();
@@ -3814,12 +3239,12 @@ define("Enemies/Cactus", ["require", "exports", "gl-matrix", "Enemies/IEnemy", "
             return false;
         }
         async Visit(hero) {
-            if (hero.StateClass !== StompState_5.StompState.name) {
-                await hero.DamageWithInvincibilityConsidered(gl_matrix_42.vec3.fromValues(0, -0.01, 0), 20);
+            if (hero.StateClass !== StompState_4.StompState.name) {
+                await hero.DamageWithInvincibilityConsidered(gl_matrix_38.vec3.fromValues(0, -0.01, 0), 20);
             }
             else {
                 // cactus will hurt the hero when stomping on it
-                await hero.Damage(gl_matrix_42.vec3.fromValues(0, -0.008, 0), 20);
+                await hero.Damage(gl_matrix_38.vec3.fromValues(0, -0.008, 0), 20);
                 await hero.ChangeState(hero.AFTER_STOMP_STATE());
             }
         }
@@ -3835,7 +3260,7 @@ define("Pickups/IPickup", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
 });
-define("Pickups/CoinObject", ["require", "exports", "gl-matrix", "BoundingBox", "Shader", "Sprite", "Utils", "TexturePool", "SoundEffectPool", "SpriteRenderer", "Components/Animation"], function (require, exports, gl_matrix_43, BoundingBox_8, Shader_13, Sprite_16, Utils_15, TexturePool_12, SoundEffectPool_10, SpriteRenderer_5, Animation_8) {
+define("Pickups/CoinObject", ["require", "exports", "gl-matrix", "BoundingBox", "Shader", "Sprite", "Utils", "TexturePool", "SoundEffectPool", "SpriteRenderer", "Components/Animation"], function (require, exports, gl_matrix_39, BoundingBox_7, Shader_12, Sprite_15, Utils_14, TexturePool_11, SoundEffectPool_9, SpriteRenderer_4, Animation_7) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.CoinObject = void 0;
@@ -3847,30 +3272,30 @@ define("Pickups/CoinObject", ["require", "exports", "gl-matrix", "BoundingBox", 
             this.pickupSound = pickupSound;
             this.texture = texture;
             this.currentFrameSet = [
-                gl_matrix_43.vec2.fromValues(0 / 10, 0),
-                gl_matrix_43.vec2.fromValues(1 / 10, 0),
-                gl_matrix_43.vec2.fromValues(2 / 10, 0),
-                gl_matrix_43.vec2.fromValues(3 / 10, 0),
-                gl_matrix_43.vec2.fromValues(4 / 10, 0),
-                gl_matrix_43.vec2.fromValues(5 / 10, 0),
-                gl_matrix_43.vec2.fromValues(6 / 10, 0),
-                gl_matrix_43.vec2.fromValues(7 / 10, 0),
-                gl_matrix_43.vec2.fromValues(8 / 10, 0),
-                gl_matrix_43.vec2.fromValues(9 / 10, 0)
+                gl_matrix_39.vec2.fromValues(0 / 10, 0),
+                gl_matrix_39.vec2.fromValues(1 / 10, 0),
+                gl_matrix_39.vec2.fromValues(2 / 10, 0),
+                gl_matrix_39.vec2.fromValues(3 / 10, 0),
+                gl_matrix_39.vec2.fromValues(4 / 10, 0),
+                gl_matrix_39.vec2.fromValues(5 / 10, 0),
+                gl_matrix_39.vec2.fromValues(6 / 10, 0),
+                gl_matrix_39.vec2.fromValues(7 / 10, 0),
+                gl_matrix_39.vec2.fromValues(8 / 10, 0),
+                gl_matrix_39.vec2.fromValues(9 / 10, 0)
             ];
             // this is hardcoded for coin.png
-            this.sprite = new Sprite_16.Sprite(Utils_15.Utils.DefaultSpriteVertices, Utils_15.Utils.CreateTextureCoordinates(0, 0, 1.0 / 10, 1.0));
-            this.renderer = new SpriteRenderer_5.SpriteRenderer(shader, texture, this.sprite, gl_matrix_43.vec2.fromValues(1, 1));
-            this.animation = new Animation_8.Animation(1 / 60 * 1000 * 3, this.renderer);
+            this.sprite = new Sprite_15.Sprite(Utils_14.Utils.DefaultSpriteVertices, Utils_14.Utils.CreateTextureCoordinates(0, 0, 1.0 / 10, 1.0));
+            this.renderer = new SpriteRenderer_4.SpriteRenderer(shader, texture, this.sprite, gl_matrix_39.vec2.fromValues(1, 1));
+            this.animation = new Animation_7.Animation(1 / 60 * 1000 * 3, this.renderer);
         }
         static async Create(position, onPickup) {
-            const shader = await Shader_13.Shader.Create('shaders/VertexShader.vert', 'shaders/FragmentShader.frag');
-            const pickupSound = await SoundEffectPool_10.SoundEffectPool.GetInstance().GetAudio('audio/collect.mp3');
-            const texture = await TexturePool_12.TexturePool.GetInstance().GetTexture('textures/coin.png');
+            const shader = await Shader_12.Shader.Create('shaders/VertexShader.vert', 'shaders/FragmentShader.frag');
+            const pickupSound = await SoundEffectPool_9.SoundEffectPool.GetInstance().GetAudio('audio/collect.mp3');
+            const texture = await TexturePool_11.TexturePool.GetInstance().GetTexture('textures/coin.png');
             return new CoinObject(position, onPickup, shader, pickupSound, texture);
         }
         get BoundingBox() {
-            return new BoundingBox_8.BoundingBox(this.position, gl_matrix_43.vec2.fromValues(1, 1));
+            return new BoundingBox_7.BoundingBox(this.position, gl_matrix_39.vec2.fromValues(1, 1));
         }
         get EndCondition() {
             return true;
@@ -3899,7 +3324,7 @@ define("Pickups/CoinObject", ["require", "exports", "gl-matrix", "BoundingBox", 
     }
     exports.CoinObject = CoinObject;
 });
-define("Pickups/HealthPickup", ["require", "exports", "gl-matrix", "BoundingBox", "Shader", "TexturePool", "Sprite", "Utils", "SoundEffectPool", "SpriteRenderer"], function (require, exports, gl_matrix_44, BoundingBox_9, Shader_14, TexturePool_13, Sprite_17, Utils_16, SoundEffectPool_11, SpriteRenderer_6) {
+define("Pickups/HealthPickup", ["require", "exports", "gl-matrix", "BoundingBox", "Shader", "TexturePool", "Sprite", "Utils", "SoundEffectPool", "SpriteRenderer"], function (require, exports, gl_matrix_40, BoundingBox_8, Shader_13, TexturePool_12, Sprite_16, Utils_15, SoundEffectPool_10, SpriteRenderer_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.HealthPickup = void 0;
@@ -3910,23 +3335,23 @@ define("Pickups/HealthPickup", ["require", "exports", "gl-matrix", "BoundingBox"
             this.shader = shader;
             this.pickupSound = pickupSound;
             this.texture = texture;
-            this.visualScale = gl_matrix_44.vec2.fromValues(2, 2);
-            this.sprite = new Sprite_17.Sprite(Utils_16.Utils.DefaultSpriteVertices, Utils_16.Utils.DefaultSpriteTextureCoordinates);
+            this.visualScale = gl_matrix_40.vec2.fromValues(2, 2);
+            this.sprite = new Sprite_16.Sprite(Utils_15.Utils.DefaultSpriteVertices, Utils_15.Utils.DefaultSpriteTextureCoordinates);
             this.currentTime = 0;
-            this.startPosition = gl_matrix_44.vec3.clone(position);
-            this.renderer = new SpriteRenderer_6.SpriteRenderer(shader, texture, this.sprite, this.visualScale);
+            this.startPosition = gl_matrix_40.vec3.clone(position);
+            this.renderer = new SpriteRenderer_5.SpriteRenderer(shader, texture, this.sprite, this.visualScale);
         }
         static async Create(position, onPickup) {
-            const shader = await Shader_14.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
-            const pickupSound = await SoundEffectPool_11.SoundEffectPool.GetInstance().GetAudio('audio/item1.wav', false);
-            const texture = await TexturePool_13.TexturePool.GetInstance().GetTexture('textures/potion.png');
+            const shader = await Shader_13.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
+            const pickupSound = await SoundEffectPool_10.SoundEffectPool.GetInstance().GetAudio('audio/item1.wav', false);
+            const texture = await TexturePool_12.TexturePool.GetInstance().GetTexture('textures/potion.png');
             return new HealthPickup(position, onPickup, shader, pickupSound, texture);
         }
         get EndCondition() {
             return false;
         }
         get BoundingBox() {
-            return new BoundingBox_9.BoundingBox(this.position, gl_matrix_44.vec2.fromValues(this.visualScale[0], this.visualScale[1]));
+            return new BoundingBox_8.BoundingBox(this.position, gl_matrix_40.vec2.fromValues(this.visualScale[0], this.visualScale[1]));
         }
         get Increase() {
             return 20;
@@ -3960,11 +3385,781 @@ define("Pickups/HealthPickup", ["require", "exports", "gl-matrix", "BoundingBox"
     }
     exports.HealthPickup = HealthPickup;
 });
+define("XBoxControllerKeys", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.XBoxControllerKeys = void 0;
+    class XBoxControllerKeys {
+    }
+    exports.XBoxControllerKeys = XBoxControllerKeys;
+    XBoxControllerKeys.A = 0;
+    XBoxControllerKeys.B = 1;
+    XBoxControllerKeys.X = 2;
+    XBoxControllerKeys.Y = 3;
+    XBoxControllerKeys.LB = 4;
+    XBoxControllerKeys.RB = 5;
+    XBoxControllerKeys.LT = 6;
+    XBoxControllerKeys.RT = 7;
+    XBoxControllerKeys.SELECT = 8;
+    XBoxControllerKeys.START = 9;
+    XBoxControllerKeys.L3 = 10;
+    XBoxControllerKeys.R3 = 11;
+    XBoxControllerKeys.UP = 12;
+    XBoxControllerKeys.DOWN = 13;
+    XBoxControllerKeys.LEFT = 14;
+    XBoxControllerKeys.RIGHT = 15;
+});
+define("Keys", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Keys = void 0;
+    class Keys {
+    }
+    exports.Keys = Keys;
+    Keys.W = 'KeyW';
+    Keys.A = 'KeyA';
+    Keys.S = 'KeyS';
+    Keys.D = 'KeyD';
+    Keys.E = 'KeyE';
+    Keys.SPACE = 'Space';
+    Keys.RIGHT_CONTROL = 'ControlRight';
+    Keys.LEFT_CONTROL = 'ControlLeft';
+    Keys.LEFT_SHIFT = 'ShiftLeft';
+    Keys.RIGHT_SHIFT = 'ShiftRight';
+    Keys.ENTER = 'Enter';
+    Keys.LEFT_ARROW = 'ArrowLeft';
+    Keys.RIGHT_ARROW = 'ArrowRight';
+    Keys.UP_ARROW = 'ArrowUp';
+    Keys.DOWN_ARROW = 'ArrowDown';
+});
+define("MainScreen", ["require", "exports", "gl-matrix", "Background", "SpriteBatch", "Shader", "TexturePool", "XBoxControllerKeys", "SoundEffectPool", "Keys", "Textbox"], function (require, exports, gl_matrix_41, Background_1, SpriteBatch_4, Shader_14, TexturePool_13, XBoxControllerKeys_1, SoundEffectPool_11, Keys_1, Textbox_2) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.MainScreen = void 0;
+    class MainScreen {
+        constructor(batch, shader, gamepadHandler, keyHandler, sound, pressStartTextbox, width, height) {
+            this.batch = batch;
+            this.shader = shader;
+            this.gamepadHandler = gamepadHandler;
+            this.keyHandler = keyHandler;
+            this.sound = sound;
+            this.pressStartTextbox = pressStartTextbox;
+            this.startEventListeners = [];
+            this.currentTime = 0;
+            this.textProjMat = gl_matrix_41.mat4.ortho(gl_matrix_41.mat4.create(), 0, width, height, 0, -1, 1);
+        }
+        static async Create(keyboardHandler, gamepadHandler, width, height) {
+            const background = new Background_1.Background();
+            const texture = await TexturePool_13.TexturePool.GetInstance().GetTexture('textures/title.jpeg');
+            const shader = await Shader_14.Shader.Create('shaders/VertexShader.vert', 'shaders/FragmentShader.frag');
+            const batch = new SpriteBatch_4.SpriteBatch(shader, [background], texture);
+            const sound = await SoundEffectPool_11.SoundEffectPool.GetInstance().GetAudio('audio/ui2.mp3', false);
+            const dimensions = await Textbox_2.Textbox.PrecalculateDimensions('Consolas', 'Press start or Enter to begin', 1);
+            const pressStartText = (await Textbox_2.Textbox.Create('Consolas')).WithText('Press start or Enter to begin', gl_matrix_41.vec2.fromValues(width / 2 - dimensions.width / 2, height - 120), 1);
+            return new MainScreen(batch, shader, gamepadHandler, keyboardHandler, sound, pressStartText, width, height);
+        }
+        Draw(proj) {
+            this.batch.Draw(proj, gl_matrix_41.mat4.create());
+            this.pressStartTextbox.Draw(this.textProjMat);
+        }
+        async Update(delta) {
+            this.currentTime += delta;
+            const frequency = 0.15;
+            const amplitude = 0.35;
+            const valueOffset = amplitude * Math.sin(2 * Math.PI * frequency * (this.currentTime / 1000));
+            const value = 0.65 + Math.abs(valueOffset);
+            this.pressStartTextbox.WithValue(value);
+            if ((this.gamepadHandler.IsPressed(XBoxControllerKeys_1.XBoxControllerKeys.START) || this.keyHandler.IsPressed(Keys_1.Keys.ENTER)) && this.currentTime > 500) {
+                await this.sound.Play();
+                this.currentTime = 0;
+                for (const startListener of this.startEventListeners) {
+                    await startListener.Start();
+                }
+            }
+        }
+        SubscribeToStartEvent(listener) {
+            this.startEventListeners.push(listener);
+        }
+        Dispose() {
+            this.pressStartTextbox.Dispose();
+            this.batch.Dispose();
+            this.shader.Delete();
+        }
+    }
+    exports.MainScreen = MainScreen;
+});
+define("PauseScreen/SharedVariables", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+});
+define("PauseScreen/IState", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+});
+define("PauseScreen/PauseStateBase", ["require", "exports", "Keys", "XBoxControllerKeys"], function (require, exports, Keys_2, XBoxControllerKeys_2) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.PauseStateBase = void 0;
+    class PauseStateBase {
+        constructor(numberOfItems, keyHandler, gamepadHandler, menuSound, selectSound) {
+            this.numberOfItems = numberOfItems;
+            this.keyHandler = keyHandler;
+            this.gamepadHandler = gamepadHandler;
+            this.menuSound = menuSound;
+            this.selectSound = selectSound;
+            this.keyPressWaitTime = 200;
+        }
+        async Update(delta, shared) {
+            shared.elapsedTimeSinceKeypress += delta;
+            // Do not trigger enter handling when it is kept hold down. Wait for a release before allowing to trigger again
+            if (!this.keyHandler.IsPressed(Keys_2.Keys.ENTER) && !this.gamepadHandler.IsPressed(XBoxControllerKeys_2.XBoxControllerKeys.START)
+                && !shared.keyWasReleased && shared.elapsedTimeSinceKeypress > 200) {
+                shared.keyWasReleased = true;
+            }
+        }
+    }
+    exports.PauseStateBase = PauseStateBase;
+});
+define("PauseScreen/MainSelectionState", ["require", "exports", "Keys", "PauseScreen/PauseStateBase", "XBoxControllerKeys"], function (require, exports, Keys_3, PauseStateBase_1, XBoxControllerKeys_3) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.MainSelectionState = void 0;
+    class MainSelectionState extends PauseStateBase_1.PauseStateBase {
+        constructor(context, keyhandler, gamepadHandler, resumeListeners, menuSound, selectSound, selectedIndex) {
+            super(2, keyhandler, gamepadHandler, menuSound, selectSound);
+            this.context = context;
+            this.resumeListeners = resumeListeners;
+            this.selectedIndex = selectedIndex;
+        }
+        Enter() {
+        }
+        Exit() {
+        }
+        async Update(delta, shared) {
+            await super.Update(delta, shared);
+            if ((this.keyHandler.IsPressed(Keys_3.Keys.S) || this.gamepadHandler.IsPressed(XBoxControllerKeys_3.XBoxControllerKeys.DOWN))
+                && shared.elapsedTimeSinceKeypress > this.keyPressWaitTime) {
+                await this.menuSound.Play(1, 0.5);
+                shared.elapsedTimeSinceKeypress = 0;
+                this.selectedIndex++;
+                if (this.selectedIndex >= this.numberOfItems) {
+                    this.selectedIndex = 0;
+                }
+            }
+            else if ((this.keyHandler.IsPressed(Keys_3.Keys.W) || this.gamepadHandler.IsPressed(XBoxControllerKeys_3.XBoxControllerKeys.UP))
+                && shared.elapsedTimeSinceKeypress > this.keyPressWaitTime) {
+                await this.menuSound.Play(1, 0.5);
+                shared.elapsedTimeSinceKeypress = 0;
+                this.selectedIndex--;
+                if (this.selectedIndex < 0) {
+                    this.selectedIndex = this.numberOfItems - 1;
+                }
+            }
+            else if ((this.keyHandler.IsPressed(Keys_3.Keys.ENTER)
+                || this.gamepadHandler.IsPressed(XBoxControllerKeys_3.XBoxControllerKeys.A)
+                || this.gamepadHandler.IsPressed(XBoxControllerKeys_3.XBoxControllerKeys.START))
+                && shared.elapsedTimeSinceKeypress > this.keyPressWaitTime && shared.keyWasReleased) {
+                shared.elapsedTimeSinceKeypress = 0;
+                shared.keyWasReleased = false;
+                await this.selectSound.Play();
+                if (this.selectedIndex === 0) { // resume
+                    for (const r of this.resumeListeners) {
+                        await r.Resume();
+                    }
+                }
+                else if (this.selectedIndex === 1) { // quit
+                    this.context.ChangeState(this.context.QUIT_SELECTION_STATE());
+                }
+            }
+            this.context.SelectedIndex = this.selectedIndex;
+        }
+    }
+    exports.MainSelectionState = MainSelectionState;
+});
+define("PauseScreen/QuitMenuState", ["require", "exports", "Keys", "PauseScreen/PauseStateBase", "XBoxControllerKeys"], function (require, exports, Keys_4, PauseStateBase_2, XBoxControllerKeys_4) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.QuitMenuState = void 0;
+    class QuitMenuState extends PauseStateBase_2.PauseStateBase {
+        constructor(context, keyHandler, controllerHandler, quitListeners, menuSound, selectSound) {
+            super(2, keyHandler, controllerHandler, menuSound, selectSound);
+            this.context = context;
+            this.quitListeners = quitListeners;
+            this.selectedIndex = 0;
+        }
+        Enter() {
+            this.selectedIndex = 0;
+        }
+        Exit() {
+            this.selectedIndex = 0;
+        }
+        async Update(delta, shared) {
+            await super.Update(delta, shared);
+            if ((this.keyHandler.IsPressed(Keys_4.Keys.A) || this.gamepadHandler.IsPressed(XBoxControllerKeys_4.XBoxControllerKeys.LEFT))
+                && shared.elapsedTimeSinceKeypress > this.keyPressWaitTime) {
+                await this.menuSound.Play(1, 0.5);
+                shared.elapsedTimeSinceKeypress = 0;
+                this.selectedIndex--;
+                if (this.selectedIndex < 0) {
+                    this.selectedIndex = this.numberOfItems - 1;
+                }
+            }
+            else if ((this.keyHandler.IsPressed(Keys_4.Keys.D) || this.gamepadHandler.IsPressed(XBoxControllerKeys_4.XBoxControllerKeys.RIGHT))
+                && shared.elapsedTimeSinceKeypress > this.keyPressWaitTime) {
+                await this.menuSound.Play(1, 0.5);
+                shared.elapsedTimeSinceKeypress = 0;
+                this.selectedIndex++;
+                if (this.selectedIndex >= this.numberOfItems) {
+                    this.selectedIndex = 0;
+                }
+            }
+            else if ((this.keyHandler.IsPressed(Keys_4.Keys.ENTER)
+                || this.gamepadHandler.IsPressed(XBoxControllerKeys_4.XBoxControllerKeys.A)
+                || this.gamepadHandler.IsPressed(XBoxControllerKeys_4.XBoxControllerKeys.START))
+                && shared.elapsedTimeSinceKeypress > this.keyPressWaitTime && shared.keyWasReleased) {
+                shared.elapsedTimeSinceKeypress = 0;
+                await this.selectSound.Play();
+                shared.keyWasReleased = false;
+                if (this.selectedIndex === 0) { // yes
+                    this.context.SelectedIndex = 0;
+                    for (const listener of this.quitListeners) {
+                        await listener.Quit();
+                    }
+                }
+                this.context.ChangeState(this.context.MAIN_SELECTION_STATE());
+            }
+            this.context.SubSelectionIndex = this.selectedIndex;
+        }
+    }
+    exports.QuitMenuState = QuitMenuState;
+});
+define("PauseScreen/PauseScreen", ["require", "exports", "Background", "gl-matrix", "Textbox", "SpriteBatch", "Shader", "SoundEffectPool", "PauseScreen/MainSelectionState", "PauseScreen/QuitMenuState"], function (require, exports, Background_2, gl_matrix_42, Textbox_3, SpriteBatch_5, Shader_15, SoundEffectPool_12, MainSelectionState_1, QuitMenuState_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.PauseScreen = void 0;
+    class PauseScreen {
+        MAIN_SELECTION_STATE() {
+            return new MainSelectionState_1.MainSelectionState(this, this.keyHandler, this.gamepadHandler, this.resumeEventListeners, this.menuSound, this.selectSound, this.selectedIndex);
+        }
+        QUIT_SELECTION_STATE() {
+            return new QuitMenuState_1.QuitMenuState(this, this.keyHandler, this.gamepadHandler, this.quitEventListeners, this.menuSound, this.selectSound);
+        }
+        set SelectedIndex(value) {
+            this.selectedIndex = value;
+        }
+        set SubSelectionIndex(value) {
+            this.subselectionIndex = value;
+        }
+        constructor(width, height, batch, shader, pausedTextbox, resumeTextbox, quitTextbox, areYouSureTextbox, yesTextbox, noTextbox, keyHandler, gamepadHandler, menuSound, selectSound) {
+            this.width = width;
+            this.height = height;
+            this.batch = batch;
+            this.shader = shader;
+            this.pausedTextbox = pausedTextbox;
+            this.resumeTextbox = resumeTextbox;
+            this.quitTextbox = quitTextbox;
+            this.areYouSureTextbox = areYouSureTextbox;
+            this.yesTextbox = yesTextbox;
+            this.noTextbox = noTextbox;
+            this.keyHandler = keyHandler;
+            this.gamepadHandler = gamepadHandler;
+            this.menuSound = menuSound;
+            this.selectSound = selectSound;
+            this.selectedIndex = 0;
+            this.resumeEventListeners = [];
+            this.quitEventListeners = [];
+            this.state = this.MAIN_SELECTION_STATE();
+            this.subselectionIndex = 0;
+            this.sharedVariables = {
+                elapsedTimeSinceKeypress: 0,
+                keyWasReleased: false
+            };
+            this.textProjMat = gl_matrix_42.mat4.ortho(gl_matrix_42.mat4.create(), 0, width, height, 0, -1, 1);
+            this.selection = [resumeTextbox, quitTextbox];
+            this.subSelection = [yesTextbox, noTextbox];
+        }
+        static async Create(width, height, keyHandler, gamepadHandler) {
+            const pausedText = "Paused";
+            const pausedTextDimensions = await Textbox_3.Textbox.PrecalculateDimensions('Consolas', pausedText, 1);
+            const pausedTextBox = (await Textbox_3.Textbox.Create('Consolas'))
+                .WithText(pausedText, gl_matrix_42.vec2.fromValues(width / 2 - pausedTextDimensions.width / 2, height / 4), 1);
+            const resumeText = "Resume";
+            const resumeTextDimensions = await Textbox_3.Textbox.PrecalculateDimensions('Consolas', resumeText, 0.5);
+            const resumeTextBox = (await Textbox_3.Textbox.Create('Consolas'))
+                .WithText(resumeText, gl_matrix_42.vec2.fromValues(width / 2 - resumeTextDimensions.width / 2, height / 4 + resumeTextDimensions.height * 3), 0.5);
+            const quitText = "Quit";
+            const quitTextDimensions = await Textbox_3.Textbox.PrecalculateDimensions('Consolas', quitText, 0.5);
+            const quitTextBox = (await Textbox_3.Textbox.Create('Consolas')).WithText(quitText, gl_matrix_42.vec2.fromValues(width / 2 - quitTextDimensions.width / 2, height / 4 + quitTextDimensions.height * 4), 0.5);
+            const areYouSureText = "Are you sure?";
+            const areYouSureDimensions = await Textbox_3.Textbox.PrecalculateDimensions('Consolas', areYouSureText, 0.5);
+            const areYouSureTextBox = ((await Textbox_3.Textbox.Create('Consolas')).WithText(areYouSureText, gl_matrix_42.vec2.fromValues(width / 2 - areYouSureDimensions.width / 2, height / 4 + areYouSureDimensions.height * 5), 0.5));
+            const yesNoDimensions = await Textbox_3.Textbox.PrecalculateDimensions('Consolas', 'Yes No', 0.5);
+            const spaceDimensions = await Textbox_3.Textbox.PrecalculateDimensions('Consolas', ' ', 0.5);
+            const yesTextBox = ((await Textbox_3.Textbox.Create('Consolas')).WithText('Yes', gl_matrix_42.vec2.fromValues(width / 2 - yesNoDimensions.width / 2, height / 4 + yesNoDimensions.height * 6), 0.5));
+            const noTextBox = ((await Textbox_3.Textbox.Create('Consolas')).WithText('No', gl_matrix_42.vec2.fromValues(width / 2 + spaceDimensions.width, height / 4 + yesNoDimensions.height * 6), 0.5));
+            const menuSound = await SoundEffectPool_12.SoundEffectPool.GetInstance().GetAudio('audio/cursor1.wav');
+            const selectSound = await SoundEffectPool_12.SoundEffectPool.GetInstance().GetAudio('audio/pause.mp3');
+            const shader = await Shader_15.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
+            shader.SetVec4Uniform('clr', gl_matrix_42.vec4.fromValues(0, 0, 0, 0.8));
+            const background = new Background_2.Background();
+            const batch = new SpriteBatch_5.SpriteBatch(shader, [background], null);
+            return new PauseScreen(width, height, batch, shader, pausedTextBox, resumeTextBox, quitTextBox, areYouSureTextBox, yesTextBox, noTextBox, keyHandler, gamepadHandler, menuSound, selectSound);
+        }
+        Draw(proj) {
+            this.batch.Draw(proj, gl_matrix_42.mat4.create());
+            this.pausedTextbox.Draw(this.textProjMat);
+            this.selection.forEach(s => s.WithSaturation(0).WithValue(0.3));
+            this.selection[this.selectedIndex].WithHue(1).WithSaturation(0).WithValue(1);
+            this.resumeTextbox.Draw(this.textProjMat);
+            this.quitTextbox.Draw(this.textProjMat);
+            if (this.state instanceof QuitMenuState_1.QuitMenuState) {
+                this.subSelection.forEach(s => s.WithSaturation(0).WithValue(0.3));
+                this.subSelection[this.subselectionIndex].WithHue(1).WithSaturation(0).WithValue(1);
+                this.areYouSureTextbox.Draw(this.textProjMat);
+                this.yesTextbox.Draw(this.textProjMat);
+                this.noTextbox.Draw(this.textProjMat);
+            }
+        }
+        async Update(elapsed) {
+            await this.state.Update(elapsed, this.sharedVariables);
+        }
+        SubscribeToResumeEvent(listener) {
+            this.resumeEventListeners.push(listener);
+        }
+        SubscribeToQuitEvent(listener) {
+            this.quitEventListeners.push(listener);
+        }
+        ChangeState(state) {
+            this.state.Exit();
+            this.state = state;
+            this.state.Enter();
+        }
+        Dispose() {
+            this.areYouSureTextbox.Dispose();
+            this.noTextbox.Dispose();
+            this.pausedTextbox.Dispose();
+            this.yesTextbox.Dispose();
+            this.batch.Dispose();
+            this.shader.Delete();
+            this.quitTextbox.Dispose();
+            this.resumeTextbox.Dispose();
+        }
+    }
+    exports.PauseScreen = PauseScreen;
+});
+define("UIService", ["require", "exports", "gl-matrix", "Textbox", "Environment"], function (require, exports, gl_matrix_43, Textbox_4, Environment_8) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.UIService = void 0;
+    class UIService {
+        // TODO: resize event?
+        constructor(screenWidth, screenHeight) {
+            this.screenWidth = screenWidth;
+            this.screenHeight = screenHeight;
+            this.textboxes = [];
+            this.textProjectionMatrix = gl_matrix_43.mat4.ortho(gl_matrix_43.mat4.create(), 0, screenWidth, screenHeight, 0, -1, 1);
+        }
+        get Width() {
+            return this.screenWidth;
+        }
+        get Height() {
+            return this.screenHeight;
+        }
+        get TileWidth() {
+            return this.screenWidth / Environment_8.Environment.HorizontalTiles;
+        }
+        get TileHeight() {
+            return this.screenHeight / Environment_8.Environment.VerticalTiles;
+        }
+        async AddTextbox() {
+            const textbox = await Textbox_4.Textbox.Create('Consolas');
+            this.textboxes.push(textbox);
+            return textbox;
+        }
+        RemoveTextbox(textbox) {
+            this.textboxes = this.textboxes.filter(t => t !== textbox);
+            textbox.Dispose();
+        }
+        Draw(_) {
+            this.textboxes.forEach(t => t.Draw(this.textProjectionMatrix));
+        }
+        Clear() {
+            this.textboxes.forEach(t => t.Dispose());
+            this.textboxes = [];
+        }
+        Dispose() {
+            this.Clear();
+        }
+    }
+    exports.UIService = UIService;
+});
+define("RenderTarget", ["require", "exports", "WebGLUtils"], function (require, exports, WebGLUtils_5) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.RenderTarget = void 0;
+    class RenderTarget {
+        constructor(_texture) {
+            this._texture = _texture;
+            const id = WebGLUtils_5.gl.createFramebuffer();
+            if (!id) {
+                throw new Error('Could not create framebuffer');
+            }
+            this._framebufferId = id;
+            WebGLUtils_5.gl.bindFramebuffer(WebGLUtils_5.gl.FRAMEBUFFER, id);
+            WebGLUtils_5.gl.framebufferTexture2D(WebGLUtils_5.gl.FRAMEBUFFER, WebGLUtils_5.gl.COLOR_ATTACHMENT0, WebGLUtils_5.gl.TEXTURE_2D, _texture.GetTexture(), 0);
+            if (WebGLUtils_5.gl.checkFramebufferStatus(WebGLUtils_5.gl.FRAMEBUFFER) !== WebGLUtils_5.gl.FRAMEBUFFER_COMPLETE) {
+                throw new Error("Error while creating framebuffer");
+            }
+            WebGLUtils_5.gl.bindFramebuffer(WebGLUtils_5.gl.FRAMEBUFFER, null);
+        }
+        Render(renderCode) {
+            WebGLUtils_5.gl.bindFramebuffer(WebGLUtils_5.gl.FRAMEBUFFER, this._framebufferId);
+            WebGLUtils_5.gl.viewport(0, 0, this._texture.Width, this._texture.Height);
+            renderCode();
+            WebGLUtils_5.gl.bindFramebuffer(WebGLUtils_5.gl.FRAMEBUFFER, null);
+        }
+        get Texture() {
+            return this._texture;
+        }
+        Dispose() {
+            WebGLUtils_5.gl.bindFramebuffer(WebGLUtils_5.gl.FRAMEBUFFER, null);
+            WebGLUtils_5.gl.deleteFramebuffer(this._framebufferId);
+        }
+    }
+    exports.RenderTarget = RenderTarget;
+});
+define("Game/IGameState", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+});
+define("Game/SharedGameStateVariables", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.SharedGameStateVariables = void 0;
+    class SharedGameStateVariables {
+        constructor() {
+            this.elapsedTimeSinceStateChange = 0;
+            this.keyWasReleased = true;
+        }
+    }
+    exports.SharedGameStateVariables = SharedGameStateVariables;
+});
+define("Game/GameStateBase", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.GameStateBase = void 0;
+    class GameStateBase {
+        constructor(sharedGameStateVariables) {
+            this.sharedGameStateVariables = sharedGameStateVariables;
+        }
+        async Update(delta) {
+            this.sharedGameStateVariables.elapsedTimeSinceStateChange += delta;
+            await this.UpdateState(delta);
+        }
+    }
+    exports.GameStateBase = GameStateBase;
+});
+define("Game/InGameState", ["require", "exports", "Game/GameStateBase", "Keys", "XBoxControllerKeys", "gl-matrix"], function (require, exports, GameStateBase_1, Keys_5, XBoxControllerKeys_5, gl_matrix_44) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.InGameState = void 0;
+    class InGameState extends GameStateBase_1.GameStateBase {
+        constructor(game, uiService, keyHandler, gamepadHandler, sharedGameStateVariables) {
+            super(sharedGameStateVariables);
+            this.game = game;
+            this.uiService = uiService;
+            this.keyHandler = keyHandler;
+            this.gamepadHandler = gamepadHandler;
+        }
+        async UpdateState(delta) {
+            if (this.sharedGameStateVariables.elapsedTimeSinceStateChange > 150 && this.game.Level) {
+                if (!this.keyHandler.IsPressed(Keys_5.Keys.ENTER) && !this.gamepadHandler.IsPressed(XBoxControllerKeys_5.XBoxControllerKeys.START)
+                    && !this.sharedGameStateVariables.keyWasReleased && this.sharedGameStateVariables.elapsedTimeSinceStateChange > 100) {
+                    this.sharedGameStateVariables.keyWasReleased = true;
+                }
+                if ((this.keyHandler.IsPressed(Keys_5.Keys.ENTER) || this.gamepadHandler.IsPressed(XBoxControllerKeys_5.XBoxControllerKeys.START))
+                    && this.sharedGameStateVariables.keyWasReleased && this.sharedGameStateVariables.elapsedTimeSinceStateChange > 100) {
+                    await this.game.ChangeState(this.game.PAUSED_STATE());
+                    this.sharedGameStateVariables.keyWasReleased = false;
+                    return;
+                }
+            }
+            const healthTextColor = (() => {
+                if (this.game.Level.Hero.Health < 35) {
+                    return { hue: 0, saturation: 100 / 100, value: 100 / 100 };
+                }
+                else if (this.game.Level.Hero.Health > 100) {
+                    return { hue: 120 / 360, saturation: 100 / 100, value: 100 / 100 };
+                }
+                else {
+                    return { hue: 0, saturation: 0, value: 100 / 100 };
+                }
+            })();
+            this.healthTextbox
+                .WithText(`Health: ${this.game.Level.Hero.Health}`, gl_matrix_44.vec2.fromValues(10, 0), 0.5)
+                .WithHue(healthTextColor.hue)
+                .WithSaturation(healthTextColor.saturation)
+                .WithValue(healthTextColor.value);
+            this.scoreTextbox
+                .WithText(`Coins: ${this.game.Level.Hero.CollectedCoins}`, gl_matrix_44.vec2.fromValues(10, this.healthTextbox.Height), 0.5);
+            await this.game.Level.Update(delta);
+        }
+        Draw(elapsed, projectionMatrix) {
+            var _a;
+            (_a = this.game.Level) === null || _a === void 0 ? void 0 : _a.Draw(projectionMatrix);
+            this.uiService.Draw(elapsed);
+        }
+        async Enter() {
+            this.healthTextbox = await this.uiService.AddTextbox();
+            this.scoreTextbox = await this.uiService.AddTextbox();
+        }
+        async Exit() {
+            this.uiService.RemoveTextbox(this.healthTextbox);
+            this.uiService.RemoveTextbox(this.scoreTextbox);
+        }
+    }
+    exports.InGameState = InGameState;
+});
+define("Game/PausedState", ["require", "exports", "Game/GameStateBase"], function (require, exports, GameStateBase_2) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.PausedState = void 0;
+    class PausedState extends GameStateBase_2.GameStateBase {
+        constructor(game, pauseScreen, sharedGameStateVariables, pauseSoundEffect, musicVolumeStack) {
+            super(sharedGameStateVariables);
+            this.game = game;
+            this.pauseScreen = pauseScreen;
+            this.pauseSoundEffect = pauseSoundEffect;
+            this.musicVolumeStack = musicVolumeStack;
+        }
+        async UpdateState(delta) {
+            await this.pauseScreen.Update(delta);
+        }
+        Draw(elapsed, projectionMatrix) {
+            this.pauseScreen.Draw(projectionMatrix);
+        }
+        async Enter() {
+            await this.pauseSoundEffect.Play();
+            this.musicVolumeStack.push(this.game.Level.GetMusicVolume());
+            this.game.Level.SetMusicVolume(this.musicVolumeStack.slice(-1)[0] * 0.15);
+        }
+        async Exit() {
+            this.game.Level.SetMusicVolume(this.musicVolumeStack.pop());
+        }
+    }
+    exports.PausedState = PausedState;
+});
+define("Game/NextLevelLoadState", ["require", "exports", "Game/GameStateBase", "Level"], function (require, exports, GameStateBase_3, Level_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.NextLevelLoadState = void 0;
+    class NextLevelLoadState extends GameStateBase_3.GameStateBase {
+        constructor(game, sharedGameStateVariables, levelName) {
+            super(sharedGameStateVariables);
+            this.game = game;
+            this.levelName = levelName;
+        }
+        Draw(elapsed, projectionMatrix) {
+        }
+        async UpdateState(delta) {
+            await this.game.ChangeState(this.game.IN_GAME_STATE());
+        }
+        async Enter() {
+            const oldLevel = this.game.Level;
+            oldLevel === null || oldLevel === void 0 ? void 0 : oldLevel.StopMusic();
+            oldLevel === null || oldLevel === void 0 ? void 0 : oldLevel.Dispose();
+            this.game.Camera.Reset();
+            this.game.Level = null;
+        }
+        async Exit() {
+            const nextLevel = await Level_1.Level.Create(this.levelName, this.game.KeyHandler, this.game.GamepadHandler, this.game.UiService, this.game.Camera, this.game);
+            nextLevel.SubscribeToNextLevelEvent(this.game);
+            nextLevel.SubscribeToRestartEvent(this.game);
+            await nextLevel.InitLevel();
+            this.game.Level = nextLevel;
+        }
+    }
+    exports.NextLevelLoadState = NextLevelLoadState;
+});
+define("Game/StartScreenState", ["require", "exports", "SoundEffectPool", "ResourceTracker"], function (require, exports, SoundEffectPool_13, ResourceTracker_4) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.StartScreenState = void 0;
+    class StartScreenState {
+        constructor(game, mainScreen) {
+            this.game = game;
+            this.mainScreen = mainScreen;
+        }
+        async Update(delta) {
+            await this.mainScreen.Update(delta);
+        }
+        Draw(elapsed, projectionMatrix) {
+            var _a;
+            (_a = this.mainScreen) === null || _a === void 0 ? void 0 : _a.Draw(projectionMatrix);
+        }
+        async Enter() {
+            this.game.Level.StopMusic();
+            this.game.Level.Dispose();
+            this.game.Level = null;
+            this.game.Camera.Reset();
+            SoundEffectPool_13.SoundEffectPool.GetInstance().StopAll();
+            this.game.SetFadeOut(0);
+            ResourceTracker_4.ResourceTracker.GetInstance().StopTracking();
+        }
+        async Exit() {
+            var _a;
+            ResourceTracker_4.ResourceTracker.GetInstance().StartTracking();
+            await ((_a = this.game.Level) === null || _a === void 0 ? void 0 : _a.InitLevel());
+        }
+    }
+    exports.StartScreenState = StartScreenState;
+});
+define("Game/Game", ["require", "exports", "gl-matrix", "Environment", "WebGLUtils", "SoundEffectPool", "TexturePool", "MainScreen", "PauseScreen/PauseScreen", "UIService", "Camera", "RenderTarget", "Texture", "SpriteBatch", "Shader", "Sprite", "Utils", "Game/InGameState", "Game/PausedState", "Game/NextLevelLoadState", "Game/StartScreenState"], function (require, exports, gl_matrix_45, Environment_9, WebGLUtils_6, SoundEffectPool_14, TexturePool_14, MainScreen_1, PauseScreen_1, UIService_1, Camera_1, RenderTarget_1, Texture_2, SpriteBatch_6, Shader_16, Sprite_17, Utils_16, InGameState_1, PausedState_1, NextLevelLoadState_1, StartScreenState_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Game = void 0;
+    // TODO: camera smoothing - the camera should not follow the hero, but a position that moves with the hero but at a slower rate
+    //  like MatchHeroPosition in dragon
+    // TODO: shake camera when attack hit
+    // TODO: ui builder framework
+    // TODO: flip sprite
+    // TODO: recheck every vector passing. Sometimes vectors need to be cloned
+    // TODO: update ts version
+    // TODO: texture map padding
+    class Game {
+        get Level() {
+            return this.level;
+        }
+        set Level(value) {
+            this.level = value;
+        }
+        START_SCREEN_STATE() {
+            return new StartScreenState_1.StartScreenState(this, this.mainScreen);
+        }
+        IN_GAME_STATE() {
+            return new InGameState_1.InGameState(this, this.uiService, this.keyHandler, this.gamepadHandler, this.sharedGameStateVariables);
+        }
+        PAUSED_STATE() {
+            return new PausedState_1.PausedState(this, this.pauseScreen, this.sharedGameStateVariables, this.pauseSoundEffect, this.musicVolumeStack);
+        }
+        NEXT_LEVEL_STATE(levelName) {
+            return new NextLevelLoadState_1.NextLevelLoadState(this, this.sharedGameStateVariables, levelName);
+        }
+        constructor(keyHandler, gamepadHandler, uiService, mainScreen, pauseScreen, pauseSoundEffect, _backgroundShader) {
+            this.keyHandler = keyHandler;
+            this.gamepadHandler = gamepadHandler;
+            this.uiService = uiService;
+            this.mainScreen = mainScreen;
+            this.pauseScreen = pauseScreen;
+            this.pauseSoundEffect = pauseSoundEffect;
+            this._backgroundShader = _backgroundShader;
+            this.projectionMatrix = gl_matrix_45.mat4.ortho(gl_matrix_45.mat4.create(), 0, Environment_9.Environment.HorizontalTiles, Environment_9.Environment.VerticalTiles, 0, -1, 1);
+            this.level = null;
+            this.musicVolumeStack = [];
+            this.sharedGameStateVariables = {
+                elapsedTimeSinceStateChange: 0,
+                keyWasReleased: true
+            };
+            this.camera = new Camera_1.Camera(gl_matrix_45.vec3.create());
+            this.Width = window.innerWidth;
+            this.Height = window.innerHeight;
+            WebGLUtils_6.gl.blendFunc(WebGLUtils_6.gl.SRC_ALPHA, WebGLUtils_6.gl.ONE_MINUS_SRC_ALPHA);
+            WebGLUtils_6.gl.viewport(0, 0, this.Width, this.Height);
+            WebGLUtils_6.gl.clearColor(0, 0, 0, 1);
+            mainScreen === null || mainScreen === void 0 ? void 0 : mainScreen.SubscribeToStartEvent(this);
+            pauseScreen === null || pauseScreen === void 0 ? void 0 : pauseScreen.SubscribeToResumeEvent(this);
+            pauseScreen === null || pauseScreen === void 0 ? void 0 : pauseScreen.SubscribeToQuitEvent(this);
+            this._fullScreenSprite = new Sprite_17.Sprite(Utils_16.Utils.DefaultFullscreenQuadVertices, Utils_16.Utils.DefaultFullscreenQuadTextureCoordinates);
+            this._renderTargetTexture = Texture_2.Texture.empty(this.Width, this.Height);
+            this._renderTarget = new RenderTarget_1.RenderTarget(this._renderTargetTexture);
+            this._finalImage = new SpriteBatch_6.SpriteBatch(this._backgroundShader, [this._fullScreenSprite], this._renderTargetTexture);
+            this.internalState = this.START_SCREEN_STATE();
+            this.start = performance.now();
+        }
+        Dispose() {
+            var _a;
+            this.mainScreen.Dispose();
+            this.pauseScreen.Dispose();
+            (_a = this.level) === null || _a === void 0 ? void 0 : _a.Dispose();
+            this.uiService.Dispose();
+            this._renderTarget.Dispose();
+        }
+        get Camera() {
+            return this.camera;
+        }
+        get KeyHandler() {
+            return this.keyHandler;
+        }
+        get GamepadHandler() {
+            return this.gamepadHandler;
+        }
+        get UiService() {
+            return this.uiService;
+        }
+        async OnNextLevelEvent(levelName) {
+            await this.ChangeState(this.NEXT_LEVEL_STATE(levelName));
+        }
+        OnRestartEvent() {
+        }
+        static async Create(keyHandler, controllerHandler) {
+            const canvas = document.getElementById('canvas');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            WebGLUtils_6.WebGLUtils.CreateGLRenderingContext(canvas);
+            await SoundEffectPool_14.SoundEffectPool.GetInstance().Preload();
+            await TexturePool_14.TexturePool.GetInstance().Preload();
+            const bgShader = await Shader_16.Shader.Create('shaders/VertexShader.vert', 'shaders/FragmentShader.frag');
+            const uiService = new UIService_1.UIService(canvas.width, canvas.height);
+            const pauseSoundEffect = await SoundEffectPool_14.SoundEffectPool.GetInstance().GetAudio('audio/pause.mp3');
+            const mainScreen = await MainScreen_1.MainScreen.Create(keyHandler, controllerHandler, canvas.width, canvas.height);
+            const pauseScreen = await PauseScreen_1.PauseScreen.Create(canvas.width, canvas.height, keyHandler, controllerHandler);
+            return new Game(keyHandler, controllerHandler, uiService, mainScreen, pauseScreen, pauseSoundEffect, bgShader);
+        }
+        async Start() {
+            await this.ChangeState(this.NEXT_LEVEL_STATE('levels/level1.json'));
+        }
+        async Quit() {
+            await this.ChangeState(this.START_SCREEN_STATE());
+        }
+        async ChangeState(state) {
+            this.sharedGameStateVariables.elapsedTimeSinceStateChange = 0;
+            await this.internalState.Exit();
+            this.internalState = state;
+            await this.internalState.Enter();
+        }
+        async Resume() {
+            await this.ChangeState(this.IN_GAME_STATE());
+        }
+        SetFadeOut(value) {
+            this._backgroundShader.SetFloatUniform('fadeFactor', value);
+        }
+        async Run() {
+            const end = performance.now();
+            const elapsed = Math.min(end - this.start, 32);
+            this.start = end;
+            this.Render(elapsed);
+            await this.Update(elapsed);
+            requestAnimationFrame(this.Run.bind(this));
+        }
+        Render(elapsedTime) {
+            var _a;
+            WebGLUtils_6.gl.clear(WebGLUtils_6.gl.COLOR_BUFFER_BIT | WebGLUtils_6.gl.DEPTH_BUFFER_BIT);
+            (_a = this._renderTarget) === null || _a === void 0 ? void 0 : _a.Render(() => {
+                this.internalState.Draw(elapsedTime, this.projectionMatrix);
+            });
+            this._finalImage.Draw(this.projectionMatrix, gl_matrix_45.mat4.create());
+        }
+        async Update(elapsedTime) {
+            await this.internalState.Update(elapsedTime);
+        }
+    }
+    exports.Game = Game;
+});
 define("Events/ILevelEvent", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
 });
-define("Events/EscapeEvent", ["require", "exports", "gl-matrix", "SoundEffectPool"], function (require, exports, gl_matrix_45, SoundEffectPool_12) {
+define("Events/EscapeEvent", ["require", "exports", "gl-matrix", "SoundEffectPool"], function (require, exports, gl_matrix_46, SoundEffectPool_15) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.EscapeEvent = void 0;
@@ -3996,9 +4191,9 @@ define("Events/EscapeEvent", ["require", "exports", "gl-matrix", "SoundEffectPoo
             return !this.started;
         }
         static async Create(camera, eventLayer, mainLayer, hero, eventLayerStopPosition, eventLayerSpeed, cameraStopPosition, cameraSpeed) {
-            const shakeSound = await SoundEffectPool_12.SoundEffectPool.GetInstance().GetAudio('audio/shake.wav', false);
-            const music = await SoundEffectPool_12.SoundEffectPool.GetInstance().GetAudio('audio/escape.mp3', false);
-            const explosionSound = await SoundEffectPool_12.SoundEffectPool.GetInstance().GetAudio('audio/explosion.mp3', false);
+            const shakeSound = await SoundEffectPool_15.SoundEffectPool.GetInstance().GetAudio('audio/shake.wav', false);
+            const music = await SoundEffectPool_15.SoundEffectPool.GetInstance().GetAudio('audio/escape.mp3', false);
+            const explosionSound = await SoundEffectPool_15.SoundEffectPool.GetInstance().GetAudio('audio/explosion.mp3', false);
             return new EscapeEvent(camera, eventLayer, mainLayer, hero, eventLayerStopPosition, eventLayerSpeed, cameraStopPosition, cameraSpeed, shakeSound, explosionSound, music);
         }
         async Update(delta) {
@@ -4028,13 +4223,13 @@ define("Events/EscapeEvent", ["require", "exports", "gl-matrix", "SoundEffectPoo
                     this.shakeSound.Stop();
                 }
                 if (this.eventLayer.IsCollidingWith(this.hero.BoundingBox, true)) {
-                    await this.hero.DamageWithInvincibilityConsidered(gl_matrix_45.vec3.fromValues(0, -0.008, 0), 20);
+                    await this.hero.DamageWithInvincibilityConsidered(gl_matrix_46.vec3.fromValues(0, -0.008, 0), 20);
                 }
                 if (this.eventCameraYPos > this.cameraStopPos) {
                     this.eventCameraYPos = (this.eventCameraYPos - (this.cameraSpeed * delta));
                 }
             }
-            const vec = gl_matrix_45.vec3.fromValues((this.eventLayer.MaxX - this.eventLayer.MinX) / 2, this.eventCameraYPos - 5, 0);
+            const vec = gl_matrix_46.vec3.fromValues((this.eventLayer.MaxX - this.eventLayer.MinX) / 2, this.eventCameraYPos - 5, 0);
             this.camera.LookAtPosition(vec, this.mainLayer);
         }
         Dispose() {
@@ -4046,7 +4241,7 @@ define("Events/EscapeEvent", ["require", "exports", "gl-matrix", "SoundEffectPoo
     exports.EscapeEvent = EscapeEvent;
     EscapeEvent.EVENT_KEY = 'escape_event';
 });
-define("Events/FreeCameraEvent", ["require", "exports", "gl-matrix"], function (require, exports, gl_matrix_46) {
+define("Events/FreeCameraEvent", ["require", "exports", "gl-matrix"], function (require, exports, gl_matrix_47) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.FreeCameraEvent = void 0;
@@ -4066,7 +4261,7 @@ define("Events/FreeCameraEvent", ["require", "exports", "gl-matrix"], function (
             return true;
         }
         async Update(_) {
-            this.camera.LookAtPosition(gl_matrix_46.vec3.clone(this.hero.Position), this.mainLayer);
+            this.camera.LookAtPosition(gl_matrix_47.vec3.clone(this.hero.Position), this.mainLayer);
         }
         Dispose() {
             // nothing to dispose
@@ -4075,7 +4270,7 @@ define("Events/FreeCameraEvent", ["require", "exports", "gl-matrix"], function (
     exports.FreeCameraEvent = FreeCameraEvent;
     FreeCameraEvent.EVENT_KEY = 'free_camera_event';
 });
-define("Events/LevelEventTrigger", ["require", "exports", "gl-matrix", "BoundingBox"], function (require, exports, gl_matrix_47, BoundingBox_10) {
+define("Events/LevelEventTrigger", ["require", "exports", "gl-matrix", "BoundingBox"], function (require, exports, gl_matrix_48, BoundingBox_9) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.LevelEventTrigger = void 0;
@@ -4104,7 +4299,7 @@ define("Events/LevelEventTrigger", ["require", "exports", "gl-matrix", "Bounding
             // invisible & invincible
         }
         get BoundingBox() {
-            return new BoundingBox_10.BoundingBox(this.position, gl_matrix_47.vec2.fromValues(1, 1));
+            return new BoundingBox_9.BoundingBox(this.position, gl_matrix_48.vec2.fromValues(1, 1));
         }
         IsCollidingWith(boundingBox, _) {
             return boundingBox.IsCollidingWith(this.BoundingBox);
@@ -4114,52 +4309,6 @@ define("Events/LevelEventTrigger", ["require", "exports", "gl-matrix", "Bounding
         }
     }
     exports.LevelEventTrigger = LevelEventTrigger;
-});
-define("UIService", ["require", "exports", "gl-matrix", "Textbox", "Environment"], function (require, exports, gl_matrix_48, Textbox_2, Environment_9) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.UIService = void 0;
-    class UIService {
-        // TODO: resize event?
-        constructor(screenWidth, screenHeight) {
-            this.screenWidth = screenWidth;
-            this.screenHeight = screenHeight;
-            this.textboxes = [];
-            this.textProjectionMatrix = gl_matrix_48.mat4.ortho(gl_matrix_48.mat4.create(), 0, screenWidth, screenHeight, 0, -1, 1);
-        }
-        get Width() {
-            return this.screenWidth;
-        }
-        get Height() {
-            return this.screenHeight;
-        }
-        get TileWidth() {
-            return this.screenWidth / Environment_9.Environment.HorizontalTiles;
-        }
-        get TileHeight() {
-            return this.screenHeight / Environment_9.Environment.VerticalTiles;
-        }
-        async AddTextbox() {
-            const textbox = await Textbox_2.Textbox.Create('Consolas');
-            this.textboxes.push(textbox);
-            return textbox;
-        }
-        RemoveTextbox(textbox) {
-            this.textboxes = this.textboxes.filter(t => t !== textbox);
-            textbox.Dispose();
-        }
-        Draw(_) {
-            this.textboxes.forEach(t => t.Draw(this.textProjectionMatrix));
-        }
-        Clear() {
-            this.textboxes.forEach(t => t.Dispose());
-            this.textboxes = [];
-        }
-        Dispose() {
-            this.Clear();
-        }
-    }
-    exports.UIService = UIService;
 });
 define("Events/Boss/SharedBossEventVariables", ["require", "exports"], function (require, exports) {
     "use strict";
@@ -4221,7 +4370,7 @@ define("Events/Boss/States/SpawnState", ["require", "exports", "gl-matrix", "Ene
     }
     exports.SpawnState = SpawnState;
 });
-define("Events/Boss/States/FightState", ["require", "exports", "Textbox", "gl-matrix"], function (require, exports, Textbox_3, gl_matrix_50) {
+define("Events/Boss/States/FightState", ["require", "exports", "Textbox", "gl-matrix"], function (require, exports, Textbox_5, gl_matrix_50) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.FightState = void 0;
@@ -4237,7 +4386,7 @@ define("Events/Boss/States/FightState", ["require", "exports", "Textbox", "gl-ma
         async Update(delta) {
             // State change is handled in OnBossDeath
             const bossHealthText = `Liz the lizard queen: ${this.boss.Health} HP`;
-            const dimensions = await Textbox_3.Textbox.PrecalculateDimensions('Consolas', bossHealthText, 0.5);
+            const dimensions = await Textbox_5.Textbox.PrecalculateDimensions('Consolas', bossHealthText, 0.5);
             this.bossHealthTextbox.WithText(bossHealthText, gl_matrix_50.vec2.fromValues(this.uiService.Width / 2 - dimensions.width / 2, 50), 0.5)
                 .WithSaturation(1);
         }
@@ -4285,6 +4434,27 @@ define("Events/Boss/States/BossDeathState", ["require", "exports"], function (re
     }
     exports.BossDeathState = BossDeathState;
 });
+define("Components/Input/InputSource", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.InputSource = void 0;
+    class InputSource {
+        constructor() {
+            this.pressedKeys = new Set();
+        }
+        PressKey(key) {
+            this.pressedKeys.add(key);
+        }
+        IsPressed(key) {
+            if (this.pressedKeys.has(key)) {
+                this.pressedKeys.delete(key);
+                return true;
+            }
+            return false;
+        }
+    }
+    exports.InputSource = InputSource;
+});
 define("Events/Boss/States/HeroExitState", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -4315,7 +4485,7 @@ define("Events/Boss/States/HeroExitState", ["require", "exports"], function (req
     }
     exports.HeroExitState = HeroExitState;
 });
-define("Events/Boss/BossEvent", ["require", "exports", "gl-matrix", "SoundEffectPool", "Events/FreeCameraEvent", "Environment", "Events/Boss/States/SpawnState", "Events/Boss/States/FightState", "Events/Boss/States/BossDeathState", "Events/Boss/States/HeroExitState"], function (require, exports, gl_matrix_51, SoundEffectPool_13, FreeCameraEvent_1, Environment_10, SpawnState_1, FightState_1, BossDeathState_1, HeroExitState_1) {
+define("Events/Boss/BossEvent", ["require", "exports", "gl-matrix", "SoundEffectPool", "Events/FreeCameraEvent", "Environment", "Events/Boss/States/SpawnState", "Events/Boss/States/FightState", "Events/Boss/States/BossDeathState", "Events/Boss/States/HeroExitState"], function (require, exports, gl_matrix_51, SoundEffectPool_16, FreeCameraEvent_1, Environment_10, SpawnState_1, FightState_1, BossDeathState_1, HeroExitState_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.BossEvent = void 0;
@@ -4361,10 +4531,10 @@ define("Events/Boss/BossEvent", ["require", "exports", "gl-matrix", "SoundEffect
             this.boss = null;
         }
         static async Create(level, hero, uiService, bossPosition, bossHealth, camera, enterWaypoint) {
-            const roar = await SoundEffectPool_13.SoundEffectPool.GetInstance().GetAudio('audio/monster_small_roar.wav', false);
-            const shakeSound = await SoundEffectPool_13.SoundEffectPool.GetInstance().GetAudio('audio/shake.wav', false);
+            const roar = await SoundEffectPool_16.SoundEffectPool.GetInstance().GetAudio('audio/monster_small_roar.wav', false);
+            const shakeSound = await SoundEffectPool_16.SoundEffectPool.GetInstance().GetAudio('audio/shake.wav', false);
             const bossHealthText = await uiService.AddTextbox();
-            const music = await SoundEffectPool_13.SoundEffectPool.GetInstance().GetAudio('audio/hunters_chance.mp3', false);
+            const music = await SoundEffectPool_16.SoundEffectPool.GetInstance().GetAudio('audio/hunters_chance.mp3', false);
             return new BossEvent(level, hero, uiService, bossHealthText, roar, bossPosition, bossHealth, camera, shakeSound, enterWaypoint, music);
         }
         async Update(delta) {
@@ -4396,7 +4566,7 @@ define("Events/Boss/BossEvent", ["require", "exports", "gl-matrix", "SoundEffect
     exports.BossEvent = BossEvent;
     BossEvent.EVENT_KEY = 'boss_event';
 });
-define("Actors/OldMan", ["require", "exports", "BoundingBox", "gl-matrix", "Shader", "TexturePool", "Sprite", "Utils", "SpriteRenderer", "Components/Animation", "Components/PhysicsComponent"], function (require, exports, BoundingBox_11, gl_matrix_52, Shader_15, TexturePool_14, Sprite_18, Utils_17, SpriteRenderer_7, Animation_9, PhysicsComponent_6) {
+define("Actors/OldMan", ["require", "exports", "BoundingBox", "gl-matrix", "Shader", "TexturePool", "Sprite", "Utils", "SpriteRenderer", "Components/Animation", "Components/PhysicsComponent"], function (require, exports, BoundingBox_10, gl_matrix_52, Shader_17, TexturePool_15, Sprite_18, Utils_17, SpriteRenderer_6, Animation_8, PhysicsComponent_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.OldMan = void 0;
@@ -4430,14 +4600,14 @@ define("Actors/OldMan", ["require", "exports", "BoundingBox", "gl-matrix", "Shad
             ];
             this.currentFrameSet = this.leftFacingAnimationFrames;
             gl_matrix_52.vec3.copy(this.lastPosition, this.position);
-            this.renderer = new SpriteRenderer_7.SpriteRenderer(shader, texture, this.sprite, this.visualScale);
+            this.renderer = new SpriteRenderer_6.SpriteRenderer(shader, texture, this.sprite, this.visualScale);
             this.renderer.TextureOffset = this.currentFrameSet[0];
-            this.animation = new Animation_9.Animation(1 / 60 * 1000 * 15, this.renderer);
-            this.physicsComponent = new PhysicsComponent_6.PhysicsComponent(this.position, this.lastPosition, () => this.BoundingBox, this.bbOffset, this.collider, false);
+            this.animation = new Animation_8.Animation(1 / 60 * 1000 * 15, this.renderer);
+            this.physicsComponent = new PhysicsComponent_5.PhysicsComponent(this.position, this.lastPosition, () => this.BoundingBox, this.bbOffset, this.collider, false);
         }
         static async Create(position, collider) {
-            const shader = await Shader_15.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
-            const texture = await TexturePool_14.TexturePool.GetInstance().GetTexture('textures/People1.png');
+            const shader = await Shader_17.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
+            const texture = await TexturePool_15.TexturePool.GetInstance().GetTexture('textures/People1.png');
             return new OldMan(position, shader, texture, collider);
         }
         Draw(proj, view) {
@@ -4494,7 +4664,7 @@ define("Actors/OldMan", ["require", "exports", "BoundingBox", "gl-matrix", "Shad
         }
         get BoundingBox() {
             const bbPosition = gl_matrix_52.vec3.add(gl_matrix_52.vec3.create(), this.position, this.bbOffset);
-            return new BoundingBox_11.BoundingBox(bbPosition, this.bbSize);
+            return new BoundingBox_10.BoundingBox(bbPosition, this.bbSize);
         }
         Dispose() {
             this.renderer.Dispose();
@@ -4649,7 +4819,7 @@ define("Sequence/SequenceBuilder", ["require", "exports", "Sequence/Sequence", "
     }
     exports.SequenceBuilder = SequenceBuilder;
 });
-define("Events/OutroEvent", ["require", "exports", "gl-matrix", "Environment", "Actors/OldMan", "SoundEffectPool", "Sequence/SequenceBuilder"], function (require, exports, gl_matrix_53, Environment_11, OldMan_1, SoundEffectPool_14, SequenceBuilder_1) {
+define("Events/OutroEvent", ["require", "exports", "gl-matrix", "Environment", "Actors/OldMan", "SoundEffectPool", "Sequence/SequenceBuilder"], function (require, exports, gl_matrix_53, Environment_11, OldMan_1, SoundEffectPool_17, SequenceBuilder_1) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.OutroEvent = void 0;
@@ -4737,7 +4907,7 @@ define("Events/OutroEvent", ["require", "exports", "gl-matrix", "Environment", "
         }
         static async Create(hero, camera, level, game, uiService) {
             const oldMan = await OldMan_1.OldMan.Create(gl_matrix_53.vec3.fromValues(33, 13, 0), level.MainLayer);
-            const dragonRoar = await SoundEffectPool_14.SoundEffectPool.GetInstance().GetAudio('audio/wrong_dragon.mp3', false);
+            const dragonRoar = await SoundEffectPool_17.SoundEffectPool.GetInstance().GetAudio('audio/wrong_dragon.mp3', false);
             const textbox = await uiService.AddTextbox();
             return new OutroEvent(hero, camera, level, oldMan, dragonRoar, game, uiService, textbox);
         }
@@ -4836,7 +5006,7 @@ define("Events/OutroEvent", ["require", "exports", "gl-matrix", "Environment", "
     exports.OutroEvent = OutroEvent;
     OutroEvent.EVENT_KEY = 'outro_event';
 });
-define("Level", ["require", "exports", "gl-matrix", "Background", "Layer", "Shader", "SpriteBatch", "TexturePool", "Tile", "SoundEffectPool", "Hero/Hero", "LevelEnd", "Enemies/Dragon/DragonEnemy", "Enemies/SlimeEnemy", "Enemies/Spike", "Enemies/Cactus", "Pickups/CoinObject", "Pickups/HealthPickup", "Events/EscapeEvent", "Events/FreeCameraEvent", "Events/LevelEventTrigger", "Events/Boss/BossEvent", "Events/OutroEvent", "Enemies/IEnemy"], function (require, exports, gl_matrix_54, Background_1, Layer_1, Shader_16, SpriteBatch_4, TexturePool_15, Tile_2, SoundEffectPool_15, Hero_1, LevelEnd_1, DragonEnemy_2, SlimeEnemy_1, Spike_1, Cactus_1, CoinObject_1, HealthPickup_1, EscapeEvent_1, FreeCameraEvent_2, LevelEventTrigger_1, BossEvent_1, OutroEvent_1, IEnemy_5) {
+define("Level", ["require", "exports", "gl-matrix", "Background", "Layer", "Shader", "SpriteBatch", "TexturePool", "Tile", "SoundEffectPool", "Hero/Hero", "LevelEnd", "Enemies/Dragon/DragonEnemy", "Enemies/SlimeEnemy", "Enemies/Spike", "Enemies/Cactus", "Pickups/CoinObject", "Pickups/HealthPickup", "Events/EscapeEvent", "Events/FreeCameraEvent", "Events/LevelEventTrigger", "Events/Boss/BossEvent", "Events/OutroEvent", "Enemies/IEnemy"], function (require, exports, gl_matrix_54, Background_3, Layer_1, Shader_18, SpriteBatch_7, TexturePool_16, Tile_2, SoundEffectPool_18, Hero_1, LevelEnd_1, DragonEnemy_2, SlimeEnemy_1, Spike_1, Cactus_1, CoinObject_1, HealthPickup_1, EscapeEvent_1, FreeCameraEvent_2, LevelEventTrigger_1, BossEvent_1, OutroEvent_1, IEnemy_5) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Level = void 0;
@@ -4863,13 +5033,13 @@ define("Level", ["require", "exports", "gl-matrix", "Background", "Layer", "Shad
             this.restartEventListeners = [];
             this.nextLevelEventListeners = [];
             this.endConditionsMetEventListeners = [];
-            this.Background = new SpriteBatch_4.SpriteBatch(bgShader, [new Background_1.Background()], bgTexture);
+            this.Background = new SpriteBatch_7.SpriteBatch(bgShader, [new Background_3.Background()], bgTexture);
             this.loadedTexturePaths.add(bgTexture.Path);
         }
         static async Create(levelName, keyHandler, gamepadHandler, uiService, camera, game) {
             var _a;
             levelName = levelName + '?version=' + Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
-            const texturePool = TexturePool_15.TexturePool.GetInstance();
+            const texturePool = TexturePool_16.TexturePool.GetInstance();
             const levelJsonString = await (await fetch(levelName)).text();
             const levelDescriptor = JSON.parse(levelJsonString);
             const texturePaths = new Set();
@@ -4877,13 +5047,13 @@ define("Level", ["require", "exports", "gl-matrix", "Background", "Layer", "Shad
                 const loadedTiles = await Promise.all(layer.tiles.map(async (tile) => {
                     const texture = await texturePool.GetTexture(tile.texture);
                     texturePaths.add(tile.texture);
-                    return new Tile_2.Tile(tile.xPos, tile.yPos, texture);
+                    return new Tile_2.Tile(gl_matrix_54.vec2.fromValues(tile.xPos, tile.yPos), texture);
                 }));
                 return await Layer_1.Layer.Create(loadedTiles, layer.parallaxOffsetFactorX, layer.parallaxOffsetFactorY, layer.layerOffsetX, layer.layerOffsetY);
             }));
-            const bgShader = await Shader_16.Shader.Create('shaders/VertexShader.vert', 'shaders/FragmentShader.frag');
-            const bgTexture = await TexturePool_15.TexturePool.GetInstance().GetTexture(levelDescriptor.background);
-            const music = levelDescriptor.music ? await SoundEffectPool_15.SoundEffectPool.GetInstance()
+            const bgShader = await Shader_18.Shader.Create('shaders/VertexShader.vert', 'shaders/FragmentShader.frag');
+            const bgTexture = await TexturePool_16.TexturePool.GetInstance().GetTexture(levelDescriptor.background);
+            const music = levelDescriptor.music ? await SoundEffectPool_18.SoundEffectPool.GetInstance()
                 .GetAudio(levelDescriptor.music, true) : null;
             return new Level(layers, (_a = levelDescriptor.defaultLayer) !== null && _a !== void 0 ? _a : 0, texturePaths, bgShader, bgTexture, music, levelDescriptor, keyHandler, gamepadHandler, uiService, camera, game);
         }
@@ -5162,562 +5332,518 @@ define("Level", ["require", "exports", "gl-matrix", "Background", "Layer", "Shad
             this.nextLevelEventListeners = [];
             this.endConditionsMetEventListeners = [];
             this.StopMusic();
-            TexturePool_15.TexturePool.GetInstance().RemoveAllIn([...this.loadedTexturePaths]);
+            TexturePool_16.TexturePool.GetInstance().RemoveAllIn([...this.loadedTexturePaths]);
         }
     }
     exports.Level = Level;
 });
-define("MainScreen", ["require", "exports", "gl-matrix", "Background", "SpriteBatch", "Shader", "TexturePool", "XBoxControllerKeys", "SoundEffectPool", "Keys", "Textbox"], function (require, exports, gl_matrix_55, Background_2, SpriteBatch_5, Shader_17, TexturePool_16, XBoxControllerKeys_2, SoundEffectPool_16, Keys_2, Textbox_4) {
+define("Projectiles/IProjectile", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
-    exports.MainScreen = void 0;
-    class MainScreen {
-        constructor(batch, shader, gamepadHandler, keyHandler, sound, pressStartTextbox, width, height) {
-            this.batch = batch;
-            this.shader = shader;
-            this.gamepadHandler = gamepadHandler;
+});
+define("Components/Input/IControlSource", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+});
+define("Components/Input/PlayerControlSource", ["require", "exports", "Keys", "XBoxControllerKeys"], function (require, exports, Keys_6, XBoxControllerKeys_6) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.PlayerControlSource = void 0;
+    class PlayerControlSource {
+        constructor(keyHandler, gamepadHandler) {
             this.keyHandler = keyHandler;
-            this.sound = sound;
-            this.pressStartTextbox = pressStartTextbox;
-            this.startEventListeners = [];
-            this.currentTime = 0;
-            this.textProjMat = gl_matrix_55.mat4.ortho(gl_matrix_55.mat4.create(), 0, width, height, 0, -1, 1);
+            this.gamepadHandler = gamepadHandler;
         }
-        static async Create(keyboardHandler, gamepadHandler, width, height) {
-            const background = new Background_2.Background();
-            const texture = await TexturePool_16.TexturePool.GetInstance().GetTexture('textures/title.jpeg');
-            const shader = await Shader_17.Shader.Create('shaders/VertexShader.vert', 'shaders/FragmentShader.frag');
-            const batch = new SpriteBatch_5.SpriteBatch(shader, [background], texture);
-            const sound = await SoundEffectPool_16.SoundEffectPool.GetInstance().GetAudio('audio/ui2.mp3', false);
-            const dimensions = await Textbox_4.Textbox.PrecalculateDimensions('Consolas', 'Press start or Enter to begin', 1);
-            const pressStartText = (await Textbox_4.Textbox.Create('Consolas')).WithText('Press start or Enter to begin', gl_matrix_55.vec2.fromValues(width / 2 - dimensions.width / 2, height - 120), 1);
-            return new MainScreen(batch, shader, gamepadHandler, keyboardHandler, sound, pressStartText, width, height);
+        Attack() {
+            return (this.keyHandler.IsPressed(Keys_6.Keys.E) || this.gamepadHandler.IsPressed(XBoxControllerKeys_6.XBoxControllerKeys.X) ||
+                this.keyHandler.IsPressed(Keys_6.Keys.LEFT_CONTROL) || this.keyHandler.IsPressed(Keys_6.Keys.RIGHT_SHIFT));
         }
-        Draw(proj) {
-            this.batch.Draw(proj, gl_matrix_55.mat4.create());
-            this.pressStartTextbox.Draw(this.textProjMat);
+        Dash() {
+            return (this.keyHandler.IsPressed(Keys_6.Keys.LEFT_SHIFT) ||
+                this.gamepadHandler.IsPressed(XBoxControllerKeys_6.XBoxControllerKeys.RB));
+        }
+        Jump() {
+            return (this.keyHandler.IsPressed(Keys_6.Keys.SPACE) ||
+                this.keyHandler.IsPressed(Keys_6.Keys.UP_ARROW) ||
+                this.keyHandler.IsPressed(Keys_6.Keys.W) ||
+                this.gamepadHandler.IsPressed(XBoxControllerKeys_6.XBoxControllerKeys.A));
+        }
+        Left() {
+            return (this.keyHandler.IsPressed(Keys_6.Keys.A) ||
+                this.keyHandler.IsPressed(Keys_6.Keys.LEFT_ARROW) ||
+                this.gamepadHandler.IsPressed(XBoxControllerKeys_6.XBoxControllerKeys.LEFT) ||
+                this.gamepadHandler.LeftStick[0] < -0.5);
+        }
+        Right() {
+            return (this.keyHandler.IsPressed(Keys_6.Keys.D) ||
+                this.keyHandler.IsPressed(Keys_6.Keys.RIGHT_ARROW) ||
+                this.gamepadHandler.IsPressed(XBoxControllerKeys_6.XBoxControllerKeys.RIGHT) ||
+                this.gamepadHandler.LeftStick[0] > 0.5);
+        }
+        Stomp() {
+            return (this.keyHandler.IsPressed(Keys_6.Keys.S) ||
+                this.keyHandler.IsPressed(Keys_6.Keys.DOWN_ARROW) ||
+                this.gamepadHandler.IsPressed(XBoxControllerKeys_6.XBoxControllerKeys.DOWN) ||
+                this.gamepadHandler.LeftStick[1] > 0.8);
+        }
+    }
+    exports.PlayerControlSource = PlayerControlSource;
+});
+define("Components/Input/ScriptControlSource", ["require", "exports"], function (require, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.ScriptControlSource = void 0;
+    class ScriptControlSource {
+        constructor(input) {
+            this.input = input;
+        }
+        Attack() {
+            return false;
+        }
+        Dash() {
+            return false;
+        }
+        Jump() {
+            return false;
+        }
+        Left() {
+            return this.input.IsPressed("left");
+        }
+        Right() {
+            return this.input.IsPressed("right");
+        }
+        Stomp() {
+            return false;
+        }
+    }
+    exports.ScriptControlSource = ScriptControlSource;
+});
+define("Hero/States/IdleState", ["require", "exports", "Hero/States/HeroBaseState"], function (require, exports, HeroBaseState_2) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.IdleState = void 0;
+    class IdleState extends HeroBaseState_2.HeroBaseState {
+        constructor(hero, spawnProjectile, physicsComponent, damageComponent, sharedStateVariables, animation) {
+            super(hero, physicsComponent, damageComponent, spawnProjectile, sharedStateVariables);
+            this.animation = animation;
+        }
+        async UpdateState(delta) {
+            if (this.hero.InputSource.Left()) {
+                this.movementBehaviour.MoveLeft(delta);
+                await this.hero.ChangeState(this.hero.WALK_STATE());
+            }
+            else if (this.hero.InputSource.Right()) {
+                this.movementBehaviour.MoveRight(delta);
+                await this.hero.ChangeState(this.hero.WALK_STATE());
+            }
+            else if (this.hero.InputSource.Jump()) {
+                await this.hero.ChangeState(this.hero.JUMP_STATE());
+            }
+            else if (this.hero.InputSource.Stomp() &&
+                this.sharedStateVariables.timeSinceLastStomp > 500 &&
+                !this.physicsComponent.OnGround) {
+                await this.hero.ChangeState(this.hero.STOMP_STATE());
+            }
+            if (this.physicsComponent.OnGround && this.sharedStateVariables.dashUsed) {
+                this.sharedStateVariables.dashAvailable = true;
+                this.sharedStateVariables.dashUsed = false;
+            }
+        }
+        async Enter() {
+            this.animation.Stop();
+        }
+        async Exit() {
+            this.animation.Start();
+        }
+    }
+    exports.IdleState = IdleState;
+});
+define("Hero/States/DashState", ["require", "exports", "Hero/States/HeroBaseState", "gl-matrix"], function (require, exports, HeroBaseState_3, gl_matrix_55) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.DashState = void 0;
+    class DashState extends HeroBaseState_3.HeroBaseState {
+        constructor(hero, spawnProjectile, physicsComponent, damageComponent, dashSound, sharedStateVariables) {
+            super(hero, physicsComponent, damageComponent, spawnProjectile, sharedStateVariables);
+            this.dashSound = dashSound;
+            this.done = false;
+        }
+        async UpdateState(delta) {
+            if (!this.done) {
+                this.sharedStateVariables.timeSinceLastDash = 0;
+                this.sharedStateVariables.dashAvailable = false;
+                this.sharedStateVariables.dashUsed = true;
+                this.physicsComponent.AddToExternalForce(gl_matrix_55.vec3.fromValues(0.08 * this.hero.FacingDirection[0], 0, 0));
+                const pitch = 0.8 + Math.random() * (1.25 - 0.8);
+                await this.dashSound.Play(pitch);
+                this.done = true;
+            }
+            if (this.sharedStateVariables.timeSinceLastDash > 300) {
+                await this.hero.ChangeState(this.hero.IDLE_STATE());
+            }
+        }
+        async Enter() {
+            this.physicsComponent.DisableGravity();
+            this.physicsComponent.ResetVerticalVelocity();
+        }
+        async Exit() {
+            this.physicsComponent.EnableGravity();
+        }
+    }
+    exports.DashState = DashState;
+});
+define("Hero/States/AfterStompState", ["require", "exports", "Hero/States/HeroBaseState", "gl-matrix"], function (require, exports, HeroBaseState_4, gl_matrix_56) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.AfterStompState = void 0;
+    class AfterStompState extends HeroBaseState_4.HeroBaseState {
+        constructor(hero, spawnProjectile, physicsComponent, damageComponent, sharedStateVariables) {
+            super(hero, physicsComponent, damageComponent, spawnProjectile, sharedStateVariables);
+        }
+        async UpdateState(delta) {
+            this.physicsComponent.AddToExternalForce(gl_matrix_56.vec3.fromValues(0, -0.10, 0));
+            await this.hero.ChangeState(this.hero.IDLE_STATE());
+        }
+        async Enter() {
+            return Promise.resolve(undefined);
+        }
+        async Exit() {
+            return Promise.resolve(undefined);
+        }
+    }
+    exports.AfterStompState = AfterStompState;
+});
+define("Hero/States/JumpState", ["require", "exports", "Hero/States/HeroBaseState", "gl-matrix"], function (require, exports, HeroBaseState_5, gl_matrix_57) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.JumpState = void 0;
+    // TODO: variable jump height
+    class JumpState extends HeroBaseState_5.HeroBaseState {
+        constructor(hero, spawnProjectile, jumpSound, landSound, physicsComponent, damageComponent, sharedStateVariables) {
+            super(hero, physicsComponent, damageComponent, spawnProjectile, sharedStateVariables);
+            this.jumpSound = jumpSound;
+            this.landSound = landSound;
+            this.remainingJumpTime = 0;
+            this.isJumping = false;
+            this.wasInAir = false;
+        }
+        async UpdateState(delta) {
+            if (this.isJumping && this.remainingJumpTime > 0) {
+                const jDelta = Math.min(this.remainingJumpTime, delta);
+                const forceMagnitude = -0.013 * (jDelta / (1000 / 60));
+                const force = gl_matrix_57.vec3.fromValues(0, forceMagnitude, 0);
+                this.physicsComponent.AddToExternalForce(force);
+                this.remainingJumpTime -= jDelta;
+                if (this.remainingJumpTime <= 0 && this.physicsComponent.OnGround) {
+                    this.isJumping = false;
+                }
+            }
+            if (this.hero.InputSource.Left()) {
+                this.movementBehaviour.MoveLeft(delta);
+            }
+            else if (this.hero.InputSource.Right()) {
+                this.movementBehaviour.MoveRight(delta);
+            }
+            if (this.hero.InputSource.Dash()) {
+                if (this.sharedStateVariables.timeSinceLastDash > 300 && this.sharedStateVariables.dashAvailable) {
+                    await this.hero.ChangeState(this.hero.DASH_STATE());
+                }
+            }
+            if (this.hero.InputSource.Stomp() &&
+                this.sharedStateVariables.timeSinceLastStomp > 500) {
+                await this.hero.ChangeState(this.hero.STOMP_STATE());
+            }
+            if (this.physicsComponent.OnGround) {
+                if ((this.wasInAir)) {
+                    await this.hero.ChangeState(this.hero.IDLE_STATE());
+                    this.wasInAir = false;
+                    this.isJumping = false;
+                    await this.landSound.Play(1.8, 0.5);
+                }
+            }
+            else {
+                this.wasInAir = true;
+            }
+        }
+        async Enter() {
+            this.remainingJumpTime = 150;
+            await this.jumpSound.Play();
+            this.isJumping = true;
+        }
+        async Exit() {
+        }
+    }
+    exports.JumpState = JumpState;
+});
+define("Hero/States/WalkState", ["require", "exports", "Hero/States/HeroBaseState"], function (require, exports, HeroBaseState_6) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.WalkState = void 0;
+    class WalkState extends HeroBaseState_6.HeroBaseState {
+        constructor(hero, spawnProjectile, animation, physicsComponent, damageComponent, walkSound, sharedStateVariables) {
+            super(hero, physicsComponent, damageComponent, spawnProjectile, sharedStateVariables);
+            this.animation = animation;
+            this.walkSound = walkSound;
+        }
+        async Enter() {
+        }
+        async Exit() {
+        }
+        async UpdateState(delta) {
+            if (this.hero.InputSource.Left()) {
+                this.movementBehaviour.MoveLeft(delta);
+            }
+            else if (this.hero.InputSource.Right()) {
+                this.movementBehaviour.MoveRight(delta);
+            }
+            else {
+                await this.hero.ChangeState(this.hero.IDLE_STATE());
+            }
+            if (this.hero.InputSource.Dash()) {
+                if (this.sharedStateVariables.timeSinceLastDash > 300 && this.sharedStateVariables.dashAvailable) {
+                    await this.hero.ChangeState(this.hero.DASH_STATE());
+                }
+            }
+            if (this.hero.InputSource.Jump()) {
+                await this.hero.ChangeState(this.hero.JUMP_STATE());
+            }
+            await this.PlayWalkSounds();
+        }
+        async PlayWalkSounds() {
+            if (this.hero.IsWalking && this.physicsComponent.OnGround) {
+                await this.walkSound.Play(1.8, 0.8);
+            }
+        }
+    }
+    exports.WalkState = WalkState;
+});
+define("Hero/Hero", ["require", "exports", "gl-matrix", "Shader", "Sprite", "TexturePool", "Utils", "BoundingBox", "SoundEffectPool", "SpriteRenderer", "Environment", "Components/Animation", "Components/PhysicsComponent", "Hero/States/DeadState", "Components/Input/PlayerControlSource", "Components/Input/InputSource", "Components/Input/ScriptControlSource", "Components/FlashOverlayComponent", "Components/DamageComponent", "Hero/States/IdleState", "Hero/States/DashState", "Hero/States/StompState", "Hero/States/AfterStompState", "Hero/States/JumpState", "Hero/States/WalkState"], function (require, exports, gl_matrix_58, Shader_19, Sprite_19, TexturePool_17, Utils_18, BoundingBox_11, SoundEffectPool_19, SpriteRenderer_7, Environment_12, Animation_9, PhysicsComponent_6, DeadState_2, PlayerControlSource_1, InputSource_1, ScriptControlSource_1, FlashOverlayComponent_4, DamageComponent_4, IdleState_2, DashState_1, StompState_5, AfterStompState_1, JumpState_1, WalkState_1) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Hero = void 0;
+    class Hero {
+        IDLE_STATE() {
+            return new IdleState_2.IdleState(this, this.SpawnProjectile, this.physicsComponent, this.damageComponent, this.sharedStateVariables, this.animation);
+        }
+        WALK_STATE() {
+            return new WalkState_1.WalkState(this, this.SpawnProjectile, this.animation, this.physicsComponent, this.damageComponent, this.walkSound, this.sharedStateVariables);
+        }
+        JUMP_STATE() {
+            return new JumpState_1.JumpState(this, this.SpawnProjectile, this.jumpSound, this.landSound, this.physicsComponent, this.damageComponent, this.sharedStateVariables);
+        }
+        DASH_STATE() {
+            return new DashState_1.DashState(this, this.SpawnProjectile, this.physicsComponent, this.damageComponent, this.stompSound, this.sharedStateVariables);
+        }
+        STOMP_STATE() {
+            return new StompState_5.StompState(this, this.SpawnProjectile, this.physicsComponent, this.damageComponent, this.stompSound, this.sharedStateVariables, this.landSound);
+        }
+        DEAD_STATE() {
+            return new DeadState_2.DeadState(this, this.onDeath, this.dieSound, this.sharedStateVariables, this.animation);
+        }
+        AFTER_STOMP_STATE() {
+            return new AfterStompState_1.AfterStompState(this, this.SpawnProjectile, this.physicsComponent, this.damageComponent, this.sharedStateVariables);
+        }
+        SetAnimationFrameset(name) {
+            this.currentFrameSet = this.framesets[name];
+        }
+        // http://www.davetech.co.uk/gamedevplatformer
+        // TODO: buffer jump -- can jump if pressed jump right before landing
+        // TODO: coyote time -- can jump for little time after falling
+        // TODO: double jump
+        // TODO: longer range but much slower attack
+        get BoundingBox() {
+            if (this.StateClass !== StompState_5.StompState.name) {
+                const bbPosition = gl_matrix_58.vec3.add(gl_matrix_58.vec3.create(), this.position, this.bbOffset);
+                return new BoundingBox_11.BoundingBox(bbPosition, this.bbSize);
+            }
+            else {
+                const bbPosition = gl_matrix_58.vec3.add(gl_matrix_58.vec3.create(), this.position, gl_matrix_58.vec3.fromValues(0.75, 1.0, 0));
+                return new BoundingBox_11.BoundingBox(bbPosition, gl_matrix_58.vec2.fromValues(1.5, 2));
+            }
+        }
+        get CollectedCoins() {
+            return this.collectedCoins;
+        }
+        IncrementCollectedCoins() {
+            this.collectedCoins++;
+        }
+        get Health() {
+            return this.health;
+        }
+        set Health(value) {
+            this.health = value;
+            if (this.health < 0) {
+                this.health = 0;
+            }
+        }
+        get InputSource() {
+            return this.input;
+        }
+        TakeoverControl() {
+            const scriptInput = new InputSource_1.InputSource();
+            this.input = new ScriptControlSource_1.ScriptControlSource(scriptInput);
+            return scriptInput;
+        }
+        ReleaseControl() {
+            this.input = new PlayerControlSource_1.PlayerControlSource(this.keyHandler, this.gamepadHandler);
+        }
+        set Speed(value) {
+            this.speed = value;
+        }
+        get Speed() {
+            return this.speed;
+        }
+        get FacingDirection() {
+            return this.lastFacingDirection;
+        }
+        get Position() {
+            return this.position;
+        }
+        get CenterPosition() {
+            return gl_matrix_58.vec3.fromValues(this.position[0] + this.visualScale[0] / 2, this.position[1] + this.visualScale[1] / 2, 0);
+        }
+        get IsWalking() {
+            return gl_matrix_58.vec3.distance(this.Position, this.lastPosition) > 0.0005;
+        }
+        get StateClass() {
+            return this.internalState.constructor.name;
+        }
+        constructor(position, visualScale, collider, onDeath, SpawnProjectile, shader, bbShader, jumpSound, landSound, walkSound, stompSound, damageSound, dieSound, texture, keyHandler, gamepadHandler) {
+            this.position = position;
+            this.visualScale = visualScale;
+            this.collider = collider;
+            this.onDeath = onDeath;
+            this.SpawnProjectile = SpawnProjectile;
+            this.shader = shader;
+            this.bbShader = bbShader;
+            this.jumpSound = jumpSound;
+            this.landSound = landSound;
+            this.walkSound = walkSound;
+            this.stompSound = stompSound;
+            this.damageSound = damageSound;
+            this.dieSound = dieSound;
+            this.texture = texture;
+            this.keyHandler = keyHandler;
+            this.gamepadHandler = gamepadHandler;
+            // TODO: make bb variables parametrizable
+            this.bbOffset = gl_matrix_58.vec3.fromValues(1.2, 1.1, 0);
+            this.bbSize = gl_matrix_58.vec2.fromValues(0.8, 1.8);
+            this.invincibleMs = 250;
+            this.sharedStateVariables = {
+                timeSinceLastDash: 500,
+                dashAvailable: true,
+                dashUsed: false,
+                timeSinceLastStomp: 500,
+                bbOffset: this.bbOffset,
+                bbSize: this.bbSize,
+                rotation: 0,
+                timeSinceLastMeleeAttack: 0,
+                timeInOverHeal: 0
+            };
+            this.health = 100;
+            this.collectedCoins = 0;
+            this.bbSprite = new Sprite_19.Sprite(Utils_18.Utils.DefaultSpriteVertices, Utils_18.Utils.DefaultSpriteTextureCoordinates);
+            this.lastPosition = gl_matrix_58.vec3.fromValues(0, 0, 1);
+            this.leftFacingAnimationFrames = [
+                gl_matrix_58.vec2.fromValues(0.0 / 12.0, 3.0 / 8.0),
+                gl_matrix_58.vec2.fromValues(1.0 / 12.0, 3.0 / 8.0),
+                gl_matrix_58.vec2.fromValues(2.0 / 12.0, 3.0 / 8.0)
+            ];
+            this.rightFacingAnimationFrames = [
+                gl_matrix_58.vec2.fromValues(0.0 / 12.0, 1.0 / 8.0),
+                gl_matrix_58.vec2.fromValues(1.0 / 12.0, 1.0 / 8.0),
+                gl_matrix_58.vec2.fromValues(2.0 / 12.0, 1.0 / 8.0)
+            ];
+            this.framesets = {
+                "left_walk": this.leftFacingAnimationFrames,
+                "right_walk": this.rightFacingAnimationFrames
+            };
+            this.currentFrameSet = this.rightFacingAnimationFrames;
+            this.DEFAULT_SPEED = 0.00025;
+            this.speed = this.DEFAULT_SPEED;
+            this.lastFacingDirection = gl_matrix_58.vec3.fromValues(1, 0, 0);
+            this.sprite = new Sprite_19.Sprite(Utils_18.Utils.DefaultSpriteVertices, 
+            // TODO: parametrize tex coords
+            Utils_18.Utils.CreateTextureCoordinates(// texture-offset is added to these coordinates, so it must be (0,0)
+            0.0 / 12.0, // These constants are hardcoded with "hero1.png" in mind
+            0.0 / 8.0, 1.0 / 12.0, 1.0 / 8.0));
+            this.input = new PlayerControlSource_1.PlayerControlSource(this.keyHandler, this.gamepadHandler);
+            this.renderer = new SpriteRenderer_7.SpriteRenderer(shader, texture, this.sprite, visualScale);
+            this.renderer.TextureOffset = this.currentFrameSet[0];
+            this.animation = new Animation_9.Animation(1 / 60 * 8 * 1000, this.renderer);
+            const flashOverlayComponent = new FlashOverlayComponent_4.FlashOverlayComponent(this.shader);
+            this.bbRenderer = new SpriteRenderer_7.SpriteRenderer(bbShader, null, this.bbSprite, this.bbSize);
+            this.bbShader.SetVec4Uniform('clr', gl_matrix_58.vec4.fromValues(1, 0, 0, 0.4));
+            this.physicsComponent = new PhysicsComponent_6.PhysicsComponent(position, this.lastPosition, () => this.BoundingBox, this.bbOffset, collider, false, false);
+            this.damageComponent = new DamageComponent_4.DamageComponent(this, flashOverlayComponent, this.damageSound, this.physicsComponent, this.invincibleMs);
+            this.internalState = this.IDLE_STATE();
+        }
+        static async Create(position, visualScale, collider, onDeath, spawnProjectile, keyHandler, gamepadHandler) {
+            const shader = await Shader_19.Shader.Create('shaders/VertexShader.vert', 'shaders/Hero.frag');
+            const bbShader = await Shader_19.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
+            const jumpSound = await SoundEffectPool_19.SoundEffectPool.GetInstance().GetAudio('audio/jump.wav');
+            const landSound = await SoundEffectPool_19.SoundEffectPool.GetInstance().GetAudio('audio/land.wav', false);
+            const walkSound = await SoundEffectPool_19.SoundEffectPool.GetInstance().GetAudio('audio/walk1.wav', false);
+            const stompSound = await SoundEffectPool_19.SoundEffectPool.GetInstance().GetAudio('audio/hero_stomp.wav', true);
+            const damageSound = await SoundEffectPool_19.SoundEffectPool.GetInstance().GetAudio('audio/hero_damage.wav');
+            const dieSound = await SoundEffectPool_19.SoundEffectPool.GetInstance().GetAudio('audio/hero_die.wav', false);
+            const texture = await TexturePool_17.TexturePool.GetInstance().GetTexture('textures/hero1.png');
+            const hero = new Hero(position, visualScale, collider, onDeath, spawnProjectile, shader, bbShader, jumpSound, landSound, walkSound, stompSound, damageSound, dieSound, texture, keyHandler, gamepadHandler);
+            await hero.Initialize();
+            return hero;
+        }
+        Draw(proj, view) {
+            this.renderer.Draw(proj, view, this.position, this.sharedStateVariables.rotation);
+            // TODO: a megváltozott bb méret nem látszik rajzolásnál mert nem updatelem a rendererben a vertexeket csak a positiont
+            // Draw bounding box
+            if (Environment_12.Environment.RenderBoundingBoxes) {
+                this.bbRenderer.Draw(proj, view, this.BoundingBox.position, this.sharedStateVariables.rotation);
+            }
+        }
+        async Initialize() {
+            await this.internalState.Enter();
         }
         async Update(delta) {
-            this.currentTime += delta;
-            const frequency = 0.15;
-            const amplitude = 0.35;
-            const valueOffset = amplitude * Math.sin(2 * Math.PI * frequency * (this.currentTime / 1000));
-            const value = 0.65 + Math.abs(valueOffset);
-            this.pressStartTextbox.WithValue(value);
-            if ((this.gamepadHandler.IsPressed(XBoxControllerKeys_2.XBoxControllerKeys.START) || this.keyHandler.IsPressed(Keys_2.Keys.ENTER)) && this.currentTime > 500) {
-                await this.sound.Play();
-                this.currentTime = 0;
-                for (const startListener of this.startEventListeners) {
-                    await startListener.Start();
-                }
+            await this.internalState.Update(delta);
+            this.animation.Animate(delta, this.currentFrameSet);
+            await this.physicsComponent.Update(delta);
+        }
+        FaceLeft() {
+            gl_matrix_58.vec3.set(this.lastFacingDirection, -1, 0, 0);
+        }
+        FaceRight() {
+            gl_matrix_58.vec3.set(this.lastFacingDirection, 1, 0, 0);
+        }
+        async DamageWithInvincibilityConsidered(pushbackForce, damage) {
+            await this.damageComponent.DamageWithInvincibilityConsidered(pushbackForce, damage);
+        }
+        async Damage(pushbackForce, damage) {
+            await this.damageComponent.Damage(pushbackForce, damage);
+        }
+        Kill() {
+            if (this.StateClass !== DeadState_2.DeadState.name) {
+                this.Health = 0;
             }
         }
-        SubscribeToStartEvent(listener) {
-            this.startEventListeners.push(listener);
+        async ChangeState(state) {
+            await this.internalState.Exit();
+            this.internalState = state;
+            await this.internalState.Enter();
         }
         Dispose() {
-            this.pressStartTextbox.Dispose();
-            this.batch.Dispose();
+            this.renderer.Dispose();
+            this.bbRenderer.Dispose();
             this.shader.Delete();
+            this.bbShader.Delete();
         }
     }
-    exports.MainScreen = MainScreen;
+    exports.Hero = Hero;
 });
-define("PauseScreen/SharedVariables", ["require", "exports"], function (require, exports) {
+define("IGameobject", ["require", "exports"], function (require, exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
 });
-define("PauseScreen/IState", ["require", "exports"], function (require, exports) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-});
-define("PauseScreen/PauseStateBase", ["require", "exports", "Keys", "XBoxControllerKeys"], function (require, exports, Keys_3, XBoxControllerKeys_3) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.PauseStateBase = void 0;
-    class PauseStateBase {
-        constructor(numberOfItems, keyHandler, gamepadHandler, menuSound, selectSound) {
-            this.numberOfItems = numberOfItems;
-            this.keyHandler = keyHandler;
-            this.gamepadHandler = gamepadHandler;
-            this.menuSound = menuSound;
-            this.selectSound = selectSound;
-            this.keyPressWaitTime = 200;
-        }
-        async Update(delta, shared) {
-            shared.elapsedTimeSinceKeypress += delta;
-            // Do not trigger enter handling when it is kept hold down. Wait for a release before allowing to trigger again
-            if (!this.keyHandler.IsPressed(Keys_3.Keys.ENTER) && !this.gamepadHandler.IsPressed(XBoxControllerKeys_3.XBoxControllerKeys.START)
-                && !shared.keyWasReleased && shared.elapsedTimeSinceKeypress > 200) {
-                shared.keyWasReleased = true;
-            }
-        }
-    }
-    exports.PauseStateBase = PauseStateBase;
-});
-define("PauseScreen/MainSelectionState", ["require", "exports", "Keys", "PauseScreen/PauseStateBase", "XBoxControllerKeys"], function (require, exports, Keys_4, PauseStateBase_1, XBoxControllerKeys_4) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.MainSelectionState = void 0;
-    class MainSelectionState extends PauseStateBase_1.PauseStateBase {
-        constructor(context, keyhandler, gamepadHandler, resumeListeners, menuSound, selectSound, selectedIndex) {
-            super(2, keyhandler, gamepadHandler, menuSound, selectSound);
-            this.context = context;
-            this.resumeListeners = resumeListeners;
-            this.selectedIndex = selectedIndex;
-        }
-        Enter() {
-        }
-        Exit() {
-        }
-        async Update(delta, shared) {
-            await super.Update(delta, shared);
-            if ((this.keyHandler.IsPressed(Keys_4.Keys.S) || this.gamepadHandler.IsPressed(XBoxControllerKeys_4.XBoxControllerKeys.DOWN))
-                && shared.elapsedTimeSinceKeypress > this.keyPressWaitTime) {
-                await this.menuSound.Play(1, 0.5);
-                shared.elapsedTimeSinceKeypress = 0;
-                this.selectedIndex++;
-                if (this.selectedIndex >= this.numberOfItems) {
-                    this.selectedIndex = 0;
-                }
-            }
-            else if ((this.keyHandler.IsPressed(Keys_4.Keys.W) || this.gamepadHandler.IsPressed(XBoxControllerKeys_4.XBoxControllerKeys.UP))
-                && shared.elapsedTimeSinceKeypress > this.keyPressWaitTime) {
-                await this.menuSound.Play(1, 0.5);
-                shared.elapsedTimeSinceKeypress = 0;
-                this.selectedIndex--;
-                if (this.selectedIndex < 0) {
-                    this.selectedIndex = this.numberOfItems - 1;
-                }
-            }
-            else if ((this.keyHandler.IsPressed(Keys_4.Keys.ENTER)
-                || this.gamepadHandler.IsPressed(XBoxControllerKeys_4.XBoxControllerKeys.A)
-                || this.gamepadHandler.IsPressed(XBoxControllerKeys_4.XBoxControllerKeys.START))
-                && shared.elapsedTimeSinceKeypress > this.keyPressWaitTime && shared.keyWasReleased) {
-                shared.elapsedTimeSinceKeypress = 0;
-                shared.keyWasReleased = false;
-                await this.selectSound.Play();
-                if (this.selectedIndex === 0) { // resume
-                    this.resumeListeners.forEach(l => l.Resume());
-                }
-                else if (this.selectedIndex === 1) { // quit
-                    this.context.ChangeState(this.context.QUIT_SELECTION_STATE());
-                }
-            }
-            this.context.SelectedIndex = this.selectedIndex;
-        }
-    }
-    exports.MainSelectionState = MainSelectionState;
-});
-define("PauseScreen/QuitMenuState", ["require", "exports", "Keys", "PauseScreen/PauseStateBase", "XBoxControllerKeys"], function (require, exports, Keys_5, PauseStateBase_2, XBoxControllerKeys_5) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.QuitMenuState = void 0;
-    class QuitMenuState extends PauseStateBase_2.PauseStateBase {
-        constructor(context, keyHandler, controllerHandler, quitListeners, menuSound, selectSound) {
-            super(2, keyHandler, controllerHandler, menuSound, selectSound);
-            this.context = context;
-            this.quitListeners = quitListeners;
-            this.selectedIndex = 0;
-        }
-        Enter() {
-            this.selectedIndex = 0;
-        }
-        Exit() {
-            this.selectedIndex = 0;
-        }
-        async Update(delta, shared) {
-            await super.Update(delta, shared);
-            if ((this.keyHandler.IsPressed(Keys_5.Keys.A) || this.gamepadHandler.IsPressed(XBoxControllerKeys_5.XBoxControllerKeys.LEFT))
-                && shared.elapsedTimeSinceKeypress > this.keyPressWaitTime) {
-                await this.menuSound.Play(1, 0.5);
-                shared.elapsedTimeSinceKeypress = 0;
-                this.selectedIndex--;
-                if (this.selectedIndex < 0) {
-                    this.selectedIndex = this.numberOfItems - 1;
-                }
-            }
-            else if ((this.keyHandler.IsPressed(Keys_5.Keys.D) || this.gamepadHandler.IsPressed(XBoxControllerKeys_5.XBoxControllerKeys.RIGHT))
-                && shared.elapsedTimeSinceKeypress > this.keyPressWaitTime) {
-                await this.menuSound.Play(1, 0.5);
-                shared.elapsedTimeSinceKeypress = 0;
-                this.selectedIndex++;
-                if (this.selectedIndex >= this.numberOfItems) {
-                    this.selectedIndex = 0;
-                }
-            }
-            else if ((this.keyHandler.IsPressed(Keys_5.Keys.ENTER)
-                || this.gamepadHandler.IsPressed(XBoxControllerKeys_5.XBoxControllerKeys.A)
-                || this.gamepadHandler.IsPressed(XBoxControllerKeys_5.XBoxControllerKeys.START))
-                && shared.elapsedTimeSinceKeypress > this.keyPressWaitTime && shared.keyWasReleased) {
-                shared.elapsedTimeSinceKeypress = 0;
-                await this.selectSound.Play();
-                shared.keyWasReleased = false;
-                if (this.selectedIndex === 0) { // yes
-                    this.context.SelectedIndex = 0;
-                    for (const listener of this.quitListeners) {
-                        await listener.Quit();
-                    }
-                }
-                this.context.ChangeState(this.context.MAIN_SELECTION_STATE());
-            }
-            this.context.SubSelectionIndex = this.selectedIndex;
-        }
-    }
-    exports.QuitMenuState = QuitMenuState;
-});
-define("PauseScreen/PauseScreen", ["require", "exports", "Background", "gl-matrix", "Textbox", "SpriteBatch", "Shader", "SoundEffectPool", "PauseScreen/MainSelectionState", "PauseScreen/QuitMenuState"], function (require, exports, Background_3, gl_matrix_56, Textbox_5, SpriteBatch_6, Shader_18, SoundEffectPool_17, MainSelectionState_1, QuitMenuState_1) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.PauseScreen = void 0;
-    class PauseScreen {
-        MAIN_SELECTION_STATE() {
-            return new MainSelectionState_1.MainSelectionState(this, this.keyHandler, this.gamepadHandler, this.resumeEventListeners, this.menuSound, this.selectSound, this.selectedIndex);
-        }
-        QUIT_SELECTION_STATE() {
-            return new QuitMenuState_1.QuitMenuState(this, this.keyHandler, this.gamepadHandler, this.quitEventListeners, this.menuSound, this.selectSound);
-        }
-        set SelectedIndex(value) {
-            this.selectedIndex = value;
-        }
-        set SubSelectionIndex(value) {
-            this.subselectionIndex = value;
-        }
-        constructor(width, height, batch, shader, pausedTextbox, resumeTextbox, quitTextbox, areYouSureTextbox, yesTextbox, noTextbox, keyHandler, gamepadHandler, menuSound, selectSound) {
-            this.width = width;
-            this.height = height;
-            this.batch = batch;
-            this.shader = shader;
-            this.pausedTextbox = pausedTextbox;
-            this.resumeTextbox = resumeTextbox;
-            this.quitTextbox = quitTextbox;
-            this.areYouSureTextbox = areYouSureTextbox;
-            this.yesTextbox = yesTextbox;
-            this.noTextbox = noTextbox;
-            this.keyHandler = keyHandler;
-            this.gamepadHandler = gamepadHandler;
-            this.menuSound = menuSound;
-            this.selectSound = selectSound;
-            this.selectedIndex = 0;
-            this.resumeEventListeners = [];
-            this.quitEventListeners = [];
-            this.state = this.MAIN_SELECTION_STATE();
-            this.subselectionIndex = 0;
-            this.sharedVariables = {
-                elapsedTimeSinceKeypress: 0,
-                keyWasReleased: false
-            };
-            this.textProjMat = gl_matrix_56.mat4.ortho(gl_matrix_56.mat4.create(), 0, width, height, 0, -1, 1);
-            this.selection = [resumeTextbox, quitTextbox];
-            this.subSelection = [yesTextbox, noTextbox];
-        }
-        static async Create(width, height, keyHandler, gamepadHandler) {
-            const pausedText = "Paused";
-            const pausedTextDimensions = await Textbox_5.Textbox.PrecalculateDimensions('Consolas', pausedText, 1);
-            const pausedTextBox = (await Textbox_5.Textbox.Create('Consolas'))
-                .WithText(pausedText, gl_matrix_56.vec2.fromValues(width / 2 - pausedTextDimensions.width / 2, height / 4), 1);
-            const resumeText = "Resume";
-            const resumeTextDimensions = await Textbox_5.Textbox.PrecalculateDimensions('Consolas', resumeText, 0.5);
-            const resumeTextBox = (await Textbox_5.Textbox.Create('Consolas'))
-                .WithText(resumeText, gl_matrix_56.vec2.fromValues(width / 2 - resumeTextDimensions.width / 2, height / 4 + resumeTextDimensions.height * 3), 0.5);
-            const quitText = "Quit";
-            const quitTextDimensions = await Textbox_5.Textbox.PrecalculateDimensions('Consolas', quitText, 0.5);
-            const quitTextBox = (await Textbox_5.Textbox.Create('Consolas')).WithText(quitText, gl_matrix_56.vec2.fromValues(width / 2 - quitTextDimensions.width / 2, height / 4 + quitTextDimensions.height * 4), 0.5);
-            const areYouSureText = "Are you sure?";
-            const areYouSureDimensions = await Textbox_5.Textbox.PrecalculateDimensions('Consolas', areYouSureText, 0.5);
-            const areYouSureTextBox = ((await Textbox_5.Textbox.Create('Consolas')).WithText(areYouSureText, gl_matrix_56.vec2.fromValues(width / 2 - areYouSureDimensions.width / 2, height / 4 + areYouSureDimensions.height * 5), 0.5));
-            const yesNoDimensions = await Textbox_5.Textbox.PrecalculateDimensions('Consolas', 'Yes No', 0.5);
-            const spaceDimensions = await Textbox_5.Textbox.PrecalculateDimensions('Consolas', ' ', 0.5);
-            const yesTextBox = ((await Textbox_5.Textbox.Create('Consolas')).WithText('Yes', gl_matrix_56.vec2.fromValues(width / 2 - yesNoDimensions.width / 2, height / 4 + yesNoDimensions.height * 6), 0.5));
-            const noTextBox = ((await Textbox_5.Textbox.Create('Consolas')).WithText('No', gl_matrix_56.vec2.fromValues(width / 2 + spaceDimensions.width, height / 4 + yesNoDimensions.height * 6), 0.5));
-            const menuSound = await SoundEffectPool_17.SoundEffectPool.GetInstance().GetAudio('audio/cursor1.wav');
-            const selectSound = await SoundEffectPool_17.SoundEffectPool.GetInstance().GetAudio('audio/pause.mp3');
-            const shader = await Shader_18.Shader.Create('shaders/VertexShader.vert', 'shaders/Colored.frag');
-            shader.SetVec4Uniform('clr', gl_matrix_56.vec4.fromValues(0, 0, 0, 0.8));
-            const background = new Background_3.Background();
-            const batch = new SpriteBatch_6.SpriteBatch(shader, [background], null);
-            return new PauseScreen(width, height, batch, shader, pausedTextBox, resumeTextBox, quitTextBox, areYouSureTextBox, yesTextBox, noTextBox, keyHandler, gamepadHandler, menuSound, selectSound);
-        }
-        Draw(proj) {
-            this.batch.Draw(proj, gl_matrix_56.mat4.create());
-            this.pausedTextbox.Draw(this.textProjMat);
-            this.selection.forEach(s => s.WithSaturation(0).WithValue(0.3));
-            this.selection[this.selectedIndex].WithHue(1).WithSaturation(0).WithValue(1);
-            this.resumeTextbox.Draw(this.textProjMat);
-            this.quitTextbox.Draw(this.textProjMat);
-            if (this.state instanceof QuitMenuState_1.QuitMenuState) {
-                this.subSelection.forEach(s => s.WithSaturation(0).WithValue(0.3));
-                this.subSelection[this.subselectionIndex].WithHue(1).WithSaturation(0).WithValue(1);
-                this.areYouSureTextbox.Draw(this.textProjMat);
-                this.yesTextbox.Draw(this.textProjMat);
-                this.noTextbox.Draw(this.textProjMat);
-            }
-        }
-        async Update(elapsed) {
-            await this.state.Update(elapsed, this.sharedVariables);
-        }
-        SubscribeToResumeEvent(listener) {
-            this.resumeEventListeners.push(listener);
-        }
-        SubscribeToQuitEvent(listener) {
-            this.quitEventListeners.push(listener);
-        }
-        ChangeState(state) {
-            this.state.Exit();
-            this.state = state;
-            this.state.Enter();
-        }
-        Dispose() {
-            this.areYouSureTextbox.Dispose();
-            this.noTextbox.Dispose();
-            this.pausedTextbox.Dispose();
-            this.yesTextbox.Dispose();
-            this.batch.Dispose();
-            this.shader.Delete();
-            this.quitTextbox.Dispose();
-            this.resumeTextbox.Dispose();
-        }
-    }
-    exports.PauseScreen = PauseScreen;
-});
-define("RenderTarget", ["require", "exports", "WebGLUtils"], function (require, exports, WebGLUtils_5) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.RenderTarget = void 0;
-    class RenderTarget {
-        constructor(_texture) {
-            this._texture = _texture;
-            const id = WebGLUtils_5.gl.createFramebuffer();
-            if (!id) {
-                throw new Error('Could not create framebuffer');
-            }
-            this._framebufferId = id;
-            WebGLUtils_5.gl.bindFramebuffer(WebGLUtils_5.gl.FRAMEBUFFER, id);
-            WebGLUtils_5.gl.framebufferTexture2D(WebGLUtils_5.gl.FRAMEBUFFER, WebGLUtils_5.gl.COLOR_ATTACHMENT0, WebGLUtils_5.gl.TEXTURE_2D, _texture.GetTexture(), 0);
-            if (WebGLUtils_5.gl.checkFramebufferStatus(WebGLUtils_5.gl.FRAMEBUFFER) !== WebGLUtils_5.gl.FRAMEBUFFER_COMPLETE) {
-                throw new Error("Error while creating framebuffer");
-            }
-            WebGLUtils_5.gl.bindFramebuffer(WebGLUtils_5.gl.FRAMEBUFFER, null);
-        }
-        Render(renderCode) {
-            WebGLUtils_5.gl.bindFramebuffer(WebGLUtils_5.gl.FRAMEBUFFER, this._framebufferId);
-            WebGLUtils_5.gl.viewport(0, 0, this._texture.Width, this._texture.Height);
-            renderCode();
-            WebGLUtils_5.gl.bindFramebuffer(WebGLUtils_5.gl.FRAMEBUFFER, null);
-        }
-        get Texture() {
-            return this._texture;
-        }
-        Dispose() {
-            WebGLUtils_5.gl.bindFramebuffer(WebGLUtils_5.gl.FRAMEBUFFER, null);
-            WebGLUtils_5.gl.deleteFramebuffer(this._framebufferId);
-        }
-    }
-    exports.RenderTarget = RenderTarget;
-});
-define("Game", ["require", "exports", "gl-matrix", "Environment", "Level", "WebGLUtils", "Keys", "SoundEffectPool", "XBoxControllerKeys", "TexturePool", "MainScreen", "PauseScreen/PauseScreen", "UIService", "Camera", "RenderTarget", "Texture", "SpriteBatch", "Shader", "Sprite", "Utils", "ResourceTracker"], function (require, exports, gl_matrix_57, Environment_12, Level_1, WebGLUtils_6, Keys_6, SoundEffectPool_18, XBoxControllerKeys_6, TexturePool_17, MainScreen_1, PauseScreen_1, UIService_1, Camera_1, RenderTarget_1, Texture_2, SpriteBatch_7, Shader_19, Sprite_19, Utils_18, ResourceTracker_4) {
-    "use strict";
-    Object.defineProperty(exports, "__esModule", { value: true });
-    exports.Game = void 0;
-    // TODO: time to implement a proper state machine at least for the game object
-    // TODO: check for key presses and elapsed time since state change
-    // TODO: sometimes key release check is also necessary for a state change
-    var State;
-    (function (State) {
-        State["START_SCREEN"] = "start_screen";
-        State["IN_GAME"] = "in_game";
-        State["PAUSED"] = "paused";
-    })(State || (State = {}));
-    // TODO: camera smoothing - the camera should not follow the hero, but a position that moves with the hero but at a slower rate
-    //  like MatchHeroPosition in dragon
-    // TODO: shake camera when attack hit
-    // TODO: ui builder framework
-    // TODO: flip sprite
-    // TODO: recheck every vector passing. Sometimes vectors need to be cloned
-    // TODO: update ts version
-    // TODO: texture map padding
-    class Game {
-        constructor(keyHandler, gamepadHandler, uiService, healthTextbox, scoreTextbox, mainScreen, pauseScreen, pauseSoundEffect, _backgroundShader) {
-            this.keyHandler = keyHandler;
-            this.gamepadHandler = gamepadHandler;
-            this.uiService = uiService;
-            this.healthTextbox = healthTextbox;
-            this.scoreTextbox = scoreTextbox;
-            this.mainScreen = mainScreen;
-            this.pauseScreen = pauseScreen;
-            this.pauseSoundEffect = pauseSoundEffect;
-            this._backgroundShader = _backgroundShader;
-            this.projectionMatrix = gl_matrix_57.mat4.ortho(gl_matrix_57.mat4.create(), 0, Environment_12.Environment.HorizontalTiles, Environment_12.Environment.VerticalTiles, 0, -1, 1);
-            this.state = State.START_SCREEN;
-            this.level = null;
-            this.musicVolumeStack = [];
-            this.keyWasReleased = true;
-            this.elapsedTimeSinceStateChange = 0;
-            this.camera = new Camera_1.Camera(gl_matrix_57.vec3.create());
-            this.Width = window.innerWidth;
-            this.Height = window.innerHeight;
-            WebGLUtils_6.gl.blendFunc(WebGLUtils_6.gl.SRC_ALPHA, WebGLUtils_6.gl.ONE_MINUS_SRC_ALPHA);
-            WebGLUtils_6.gl.viewport(0, 0, this.Width, this.Height);
-            WebGLUtils_6.gl.clearColor(0, 0, 0, 1);
-            mainScreen === null || mainScreen === void 0 ? void 0 : mainScreen.SubscribeToStartEvent(this);
-            pauseScreen === null || pauseScreen === void 0 ? void 0 : pauseScreen.SubscribeToResumeEvent(this);
-            pauseScreen === null || pauseScreen === void 0 ? void 0 : pauseScreen.SubscribeToQuitEvent(this);
-            this._fullScreenSprite = new Sprite_19.Sprite(Utils_18.Utils.DefaultFullscreenQuadVertices, Utils_18.Utils.DefaultFullscreenQuadTextureCoordinates);
-            this._renderTargetTexture = Texture_2.Texture.empty(this.Width, this.Height);
-            this._renderTarget = new RenderTarget_1.RenderTarget(this._renderTargetTexture);
-            this._finalImage = new SpriteBatch_7.SpriteBatch(this._backgroundShader, [this._fullScreenSprite], this._renderTargetTexture);
-            this.start = performance.now();
-        }
-        Dispose() {
-            var _a;
-            this.mainScreen.Dispose();
-            this.pauseScreen.Dispose();
-            (_a = this.level) === null || _a === void 0 ? void 0 : _a.Dispose();
-            this.uiService.Dispose();
-            this._renderTarget.Dispose();
-        }
-        async OnNextLevelEvent(levelName) {
-            const oldLevel = this.level;
-            oldLevel === null || oldLevel === void 0 ? void 0 : oldLevel.StopMusic();
-            oldLevel === null || oldLevel === void 0 ? void 0 : oldLevel.Dispose();
-            this.level = null;
-            const nextLevel = await Level_1.Level.Create(levelName, this.keyHandler, this.gamepadHandler, this.uiService, this.camera, this);
-            nextLevel.SubscribeToNextLevelEvent(this);
-            nextLevel.SubscribeToRestartEvent(this);
-            await nextLevel.InitLevel();
-            this.level = nextLevel;
-        }
-        OnRestartEvent() {
-        }
-        static async Create(keyHandler, controllerHandler) {
-            const canvas = document.getElementById('canvas');
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            WebGLUtils_6.WebGLUtils.CreateGLRenderingContext(canvas);
-            await SoundEffectPool_18.SoundEffectPool.GetInstance().Preload();
-            await TexturePool_17.TexturePool.GetInstance().Preload();
-            const bgShader = await Shader_19.Shader.Create('shaders/VertexShader.vert', 'shaders/FragmentShader.frag');
-            const uiService = new UIService_1.UIService(canvas.width, canvas.height);
-            const healthTextbox = await uiService.AddTextbox();
-            const scoreTextBox = await uiService.AddTextbox();
-            const pauseSoundEffect = await SoundEffectPool_18.SoundEffectPool.GetInstance().GetAudio('audio/pause.mp3');
-            const mainScreen = await MainScreen_1.MainScreen.Create(keyHandler, controllerHandler, canvas.width, canvas.height);
-            const pauseScreen = await PauseScreen_1.PauseScreen.Create(canvas.width, canvas.height, keyHandler, controllerHandler);
-            return new Game(keyHandler, controllerHandler, uiService, healthTextbox, scoreTextBox, mainScreen, pauseScreen, pauseSoundEffect, bgShader);
-        }
-        async Start() {
-            const level = await Level_1.Level.Create('levels/level1.json', this.keyHandler, this.gamepadHandler, this.uiService, this.camera, this);
-            level.SubscribeToNextLevelEvent(this);
-            level.SubscribeToRestartEvent(this);
-            this.level = level;
-            if (this.state === State.START_SCREEN) {
-                await this.level.InitLevel();
-                this.state = State.IN_GAME;
-                this.elapsedTimeSinceStateChange = 0;
-            }
-            ResourceTracker_4.ResourceTracker.GetInstance().StartTracking();
-        }
-        async Quit() {
-            var _a, _b;
-            (_a = this.level) === null || _a === void 0 ? void 0 : _a.StopMusic();
-            (_b = this.level) === null || _b === void 0 ? void 0 : _b.Dispose();
-            this.level = null;
-            this.state = State.START_SCREEN;
-            this.camera = new Camera_1.Camera(gl_matrix_57.vec3.create());
-            SoundEffectPool_18.SoundEffectPool.GetInstance().StopAll();
-            this.SetFadeOut(0);
-            ResourceTracker_4.ResourceTracker.GetInstance().StopTracking();
-            return Promise.resolve();
-        }
-        async Pause() {
-            // TODO: state machine: Only can go to paused from ingame
-            if (this.state === State.IN_GAME) {
-                this.state = State.PAUSED;
-                await this.pauseSoundEffect.Play();
-                this.elapsedTimeSinceStateChange = 0;
-                this.musicVolumeStack.push(this.level.GetMusicVolume());
-                this.level.SetMusicVolume(this.musicVolumeStack.slice(-1)[0] * 0.15);
-            }
-        }
-        Resume() {
-            // TODO: statemachine move state
-            this.state = State.IN_GAME;
-            this.elapsedTimeSinceStateChange = 0;
-            this.level.SetMusicVolume(this.musicVolumeStack.pop());
-        }
-        SetFadeOut(value) {
-            this._backgroundShader.SetFloatUniform('fadeFactor', value);
-        }
-        async Run() {
-            const end = performance.now();
-            const elapsed = Math.min(end - this.start, 32);
-            this.start = end;
-            this.Render(elapsed);
-            await this.Update(elapsed);
-            requestAnimationFrame(this.Run.bind(this));
-        }
-        Render(elapsedTime) {
-            var _a;
-            WebGLUtils_6.gl.clear(WebGLUtils_6.gl.COLOR_BUFFER_BIT | WebGLUtils_6.gl.DEPTH_BUFFER_BIT);
-            (_a = this._renderTarget) === null || _a === void 0 ? void 0 : _a.Render(() => {
-                var _a, _b, _c;
-                if (this.state === State.START_SCREEN) {
-                    (_a = this.mainScreen) === null || _a === void 0 ? void 0 : _a.Draw(this.projectionMatrix);
-                }
-                else {
-                    (_b = this.level) === null || _b === void 0 ? void 0 : _b.Draw(this.projectionMatrix);
-                    this.uiService.Draw(elapsedTime);
-                    if (this.state === State.PAUSED) {
-                        // Draw the pause screen over the other rendered elements
-                        (_c = this.pauseScreen) === null || _c === void 0 ? void 0 : _c.Draw(this.projectionMatrix);
-                    }
-                }
-            });
-            this._finalImage.Draw(this.projectionMatrix, gl_matrix_57.mat4.create());
-        }
-        async Update(elapsedTime) {
-            this.elapsedTimeSinceStateChange += elapsedTime;
-            if (this.state === State.START_SCREEN) {
-                await this.mainScreen.Update(elapsedTime);
-            }
-            else if (this.state === State.IN_GAME && this.elapsedTimeSinceStateChange > 150 && this.level) {
-                if (!this.keyHandler.IsPressed(Keys_6.Keys.ENTER) && !this.gamepadHandler.IsPressed(XBoxControllerKeys_6.XBoxControllerKeys.START)
-                    && !this.keyWasReleased && this.elapsedTimeSinceStateChange > 100) {
-                    this.keyWasReleased = true;
-                }
-                if ((this.keyHandler.IsPressed(Keys_6.Keys.ENTER) || this.gamepadHandler.IsPressed(XBoxControllerKeys_6.XBoxControllerKeys.START))
-                    && this.keyWasReleased && this.elapsedTimeSinceStateChange > 100) {
-                    await this.Pause();
-                    this.keyWasReleased = false;
-                }
-                const healthTextColor = (() => {
-                    if (this.level.Hero.Health < 35) {
-                        return { hue: 0, saturation: 100 / 100, value: 100 / 100 };
-                    }
-                    else if (this.level.Hero.Health > 100) {
-                        return { hue: 120 / 360, saturation: 100 / 100, value: 100 / 100 };
-                    }
-                    else {
-                        return { hue: 0, saturation: 0, value: 100 / 100 };
-                    }
-                })();
-                this.healthTextbox
-                    .WithText(`Health: ${this.level.Hero.Health}`, gl_matrix_57.vec2.fromValues(10, 0), 0.5)
-                    .WithHue(healthTextColor.hue)
-                    .WithSaturation(healthTextColor.saturation)
-                    .WithValue(healthTextColor.value);
-                this.scoreTextbox
-                    .WithText(`Coins: ${this.level.Hero.CollectedCoins}`, gl_matrix_57.vec2.fromValues(10, this.healthTextbox.Height), 0.5);
-                await this.level.Update(elapsedTime);
-            }
-            else if (this.state === State.PAUSED) {
-                await this.pauseScreen.Update(elapsedTime);
-            }
-        }
-    }
-    exports.Game = Game;
-});
-define("main", ["require", "exports", "domready", "Game", "ControllerHandler", "KeyHandler", "Keys"], function (require, exports, domready, Game_1, ControllerHandler_1, KeyHandler_1, Keys_7) {
+define("main", ["require", "exports", "domready", "Game/Game", "ControllerHandler", "KeyHandler", "Keys"], function (require, exports, domready, Game_1, ControllerHandler_1, KeyHandler_1, Keys_7) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     domready(async () => {
@@ -5746,7 +5872,7 @@ define("main", ["require", "exports", "domready", "Game", "ControllerHandler", "
         }, false);
         document.addEventListener('visibilitychange', async () => {
             if (document.hidden) {
-                await game.Pause();
+                await game.ChangeState(game.PAUSED_STATE());
             }
         });
         window.addEventListener('gamepadconnected', (e) => {
