@@ -243,6 +243,7 @@ li::before {
     font-size: clamp(1.8rem, 4vw, 3.2rem);
     margin-left: 12vw;
     margin-top: 10vh;
+    white-space: nowrap;
     color: #ffffff;
     font-family: inherit;
     font-weight: 700;
