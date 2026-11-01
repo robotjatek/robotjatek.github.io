@@ -49,7 +49,6 @@
     box-sizing: border-box;
 }
 
-/* Custom Hacker Scrollbar */
 ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -74,8 +73,7 @@ body {
     margin: 0;
     padding: 0;
     background-color: var(--bg-base);
-    /* Subtle retro tech dot-matrix grid */
-    background-image: 
+    background-image:
         radial-gradient(rgba(157, 91, 240, 0.08) 1px, transparent 1px),
         linear-gradient(to bottom, rgba(10, 13, 20, 0.8), var(--bg-base));
     background-size: 24px 24px, 100% 100%;
@@ -224,7 +222,7 @@ li::before {
 }
 
 .parallax::after {
-    /* Subtle scanline overlay in the banner */
+    /* scanline overlay in the banner */
     content: "";
     position: absolute;
     inset: 0;
@@ -266,7 +264,6 @@ li::before {
     z-index: 10;
 }
 
-/* Terminal Console Cards */
 .header, .main .menu, .main .site {
     background-color: var(--bg-surface);
     border: 1px solid var(--border-color);
@@ -276,7 +273,7 @@ li::before {
     position: relative;
 }
 
-/* Subtle top glow highlight on console cards */
+/* Subtle top glow highlight on cards */
 .header::before, .main .site::before {
     content: "";
     position: absolute;
@@ -288,7 +285,6 @@ li::before {
     opacity: 0.6;
 }
 
-/* Header Section */
 .header {
     padding: var(--spacing-xl);
     margin-bottom: var(--spacing-md);
@@ -343,7 +339,7 @@ li::before {
 }
 
 .header-content .left .name::before {
-    display: none; /* Keep avatar as lead, skip # for the profile name */
+    display: none; /* skip # for the profile name */
 }
 
 .header-content .left .title {
@@ -361,7 +357,7 @@ li::before {
     font-size: 0.85rem;
 }
 
-/* Social links styled as terminal chip icons */
+/* Social links styled as chip icons */
 .header-content .left .social {
     display: flex;
     flex-direction: row;
@@ -540,6 +536,16 @@ code {
     border-radius: var(--radius-sm);
     font-size: 0.85em;
     font-family: inherit;
+}
+
+.techs::before {
+    content:  "[";
+    color: var(--text-primary);
+}
+
+.techs::after {
+    content: "]";
+    color: var(--text-primary);
 }
 
 .video-container {
