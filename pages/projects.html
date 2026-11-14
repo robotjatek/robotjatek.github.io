@@ -54,15 +54,19 @@
                 <li>System bus</li>
                 <li>Cartridge loading (iNES 1.0 format)</li>
                 <li>System memory with mirroring</li>
-                <li>CPU emulation architecture</li>
+                <li>6502 CPU emulation</li>
                 <li>All official instructions are implemented</li>
                 <li>Unofficial opcodes from nestest.nes are implemented</li>
                 <li>Controller implementation (Controller 1: A, S, Up, Down, Left, Right, Space, Enter)</li>
                 <li>PPU implementation</li>
-                <li>Fake APU implementation (disregards any reads or writes)</li>
+                <li>PPU is clocked by bus accesses</li>
+                <li>4-step frame counter IRQ is implemented in APU, otherwise its NO-OP</li>
+                <li>Tests from pages 1-9 in AccuracyCoin.nes fully pass</li>
             </ul>
 
-            <div>Works with NROM (mapper 0) games</div>
+            <p>Works with NROM (mapper 0) games</p>
+
+            <p>Tested with: Donkey Kong, Donkey Kong Jr., Donkey Kong3, Excitebike, Galaga, Galaxian, Bomberman, Magic Jewelry, Mario Bros., Super Mario Bros. 1, F1 Race, Pinball, 1942, Baseball, Battle City, Kungfu, Karateka, Macross, Ice Climber, Road Fighter, Soccer</p>
         </div>
 
         <hr />
@@ -75,6 +79,7 @@
             <img src="../assets/img/nes/sm1.png" style="max-width: 400px;" alt="Mario Bros. screenshot"/>
             <img src="../assets/img/nes/sm2.png" style="max-width: 400px;" alt="Mario Bros. gameplay screenshot"/>
             <img src="../assets/img/nes/smb.png" style="max-width: 400px;" alt="Super Mario Bros title screen screenshot"/>
+            <img src="../assets/img/nes/ac.png" style="max-width: 400px;" alt="AccuracyCoin screenshot"/>
         </div>
     </div>
 
@@ -133,17 +138,6 @@
             <p><code>C#</code> <code>WPF</code></p>
         </div>
         <img src="../assets/img/tiled.png" class="centered-image" alt="tile editor screenshot"/>
-    </div>
-
-    <hr />
-
-    <div>
-        <h2>WPLauncher</h2>
-        <p><i>Archived in favor of a WPLauncher ES</i></p>
-        <p>Repository: <a href="https://github.com/robotjatek/WPLauncher" title="WPLauncher" target="_blank" rel="noopener noreferrer"><i class="bi bi-github"></i></a></p>
-        <p>A WP7-inspired launcher for Android written in Xamarin.</p>
-        <p><code>C#</code> <code>Xamarin</code> <code>Android</code></p>
-        <img class="centered-image" src="../assets/img/wp.png" alt="WPLauncher screenshot"/>
     </div>
 
     <hr />
@@ -212,10 +206,20 @@
         <h2>PSX emu</h2>
         <p>Repository: <a href="https://github.com/robotjatek/PsxEmu" title="PSX emu" target="_blank" rel="noopener noreferrer"><i class="bi bi-github"></i></a></p>
         <p>
-            Many years old abandoned PSX emulator written in C++. In its current state it can run the psx boot sequence to some extent. Features an R3000 CPU bytecode interpreter.
-            I might revive it in the future...
+            An experimental C++ PlayStation emulator implementing an R3000A MIPS bytecode interpreter capable of executing the BIOS boot sequence
         </p>
         <p><code>C++</code> <code>R3000A</code> <code>MIPS1</code> <code>PSX</code> <code>emulation</code></p>
         <img src="../assets/img/psx.png" class="centered-image" alt="PSX emulator screenshot running the first frames of the BIOS"/>
+    </div>
+
+    <hr />
+
+    <div>
+        <h2>WPLauncher</h2>
+        <p><i>Archived in favor of a WPLauncher ES</i></p>
+        <p>Repository: <a href="https://github.com/robotjatek/WPLauncher" title="WPLauncher" target="_blank" rel="noopener noreferrer"><i class="bi bi-github"></i></a></p>
+        <p>A WP7-inspired launcher for Android written in Xamarin.</p>
+        <p><code>C#</code> <code>Xamarin</code> <code>Android</code></p>
+        <img class="centered-image" src="../assets/img/wp.png" alt="WPLauncher screenshot"/>
     </div>
 </div>
